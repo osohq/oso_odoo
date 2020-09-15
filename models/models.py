@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from odoo import models
-from oso import Oso
+from oso import Oso, OsoException
 
 from pathlib import Path
 
@@ -22,7 +22,8 @@ class Base(models.AbstractModel):
 
 
     def _register_hook(self):
-        with open("/tmp/odoo_models", "a") as f:
-            print(self._name, file=f)
+        # Get name of original model class
+        name = type(self).__bases__[0].__name__
+        oso.register_class(type(self), name=name)
 
-        oso.register_class(type(self))
+

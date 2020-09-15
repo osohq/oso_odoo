@@ -1,2 +1,2 @@
-allow(_actor, "read", resource) if
+allow(_actor, "read", resource: MailMessage) if
     print(resource);
