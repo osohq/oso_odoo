@@ -1,18 +1,28 @@
 # -*- coding: utf-8 -*-
 
-# from odoo import models, fields, api
+from odoo import models
+from oso import Oso
+
+from pathlib import Path
+
+oso = Oso()
+mypath = Path(__file__).parent.parent
+oso.load_file(mypath / "security" / "authorization.polar")
+
+class Base(models.AbstractModel):
+
+    _inherit = 'base'
+
+    def read(self, fields=None, load='_classic_read'):
+        if oso.is_allowed(self.env.user, "read", self):
+            print("allowed!")
+        else:
+            print("denied!")
+        return super(Base, self).read(fields, load=load)
 
 
-# class oso_auth(models.Model):
-#     _name = 'oso_auth.oso_auth'
-#     _description = 'oso_auth.oso_auth'
+    def _register_hook(self):
+        with open("/tmp/odoo_models", "a") as f:
+            print(self._name, file=f)
 
-#     name = fields.Char()
-#     value = fields.Integer()
-#     value2 = fields.Float(compute="_value_pc", store=True)
-#     description = fields.Text()
-#
-#     @api.depends('value')
-#     def _value_pc(self):
-#         for record in self:
-#             record.value2 = float(record.value) / 100
+        oso.register_class(type(self))
