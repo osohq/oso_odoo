@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_oso_auth_oso_auth,oso_auth.oso_auth,model_oso_auth_oso_auth,base.group_user,1,1,1,1
