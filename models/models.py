@@ -7,21 +7,23 @@ from oso import Oso, OsoException
 
 from pathlib import Path
 
+
 class Oso(models.AbstractModel):
     _name = "oso"
     _description = "global oso state"
     oso = Oso()
 
-    # we know this is a singleton because we checked
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
         mypath = Path(__file__).parent.parent
-        self.oso.load_file(mypath / "security" / "base.polar")
+        policy = mypath / "security" / "base.polar"
+        self.oso.load_file(policy)
+
 
 class OsoBase(models.AbstractModel):
 
-    _inherit = 'base'
+    _inherit = "base"
 
     def create(self, *args, **kwargs):
         oso = self.env["oso"].oso
@@ -57,16 +59,19 @@ class OsoBase(models.AbstractModel):
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
 
+
 class OsoModelAccess(models.Model):
 
-    _inherit = 'ir.model.access'
+    _inherit = "ir.model.access"
 
     @api.model
-    @tools.ormcache_context('self._uid', 'model', 'mode', 'raise_exception', keys=('lang',))
-    def check(self, model, mode='read', raise_exception=True):
+    @tools.ormcache_context(
+        "self._uid", "model", "mode", "raise_exception", keys=("lang",)
+    )
+    def check(self, model, mode="read", raise_exception=True):
         if self.env.su:
             return True
-        oso = self.env['oso'].oso
+        oso = self.env["oso"].oso
         if oso.is_allowed(self.env.user, mode, model):
             return True
         elif raise_exception:
