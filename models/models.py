@@ -73,4 +73,4 @@ class OsoModelAccess(models.Model):
             raise AccessError(f"model access check failed for {model}")
         else:
             # for now, fall back to default odoo authorization if oso auth fails
-            return super(IrModelAccess, self).check(model, mode=mode, raise_exception=raise_exception)
+            return super().check(model, mode=mode, raise_exception=raise_exception)

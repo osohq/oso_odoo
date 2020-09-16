@@ -1,5 +1,6 @@
 allow(_actor, "create", resource) if
-    not resource matches mail::message;
+    not resource matches mail::message and
+    not resource matches "ir.ui.menu";
 
 allow(_actor, "read", resource) if
     not resource matches mail::message;
