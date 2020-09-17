@@ -34,7 +34,9 @@ class OsoBase(models.AbstractModel):
             @wraps(function)
             def wrapper(self, *args, **kwargs):
                 oso = self.env["oso"].oso
-                if oso.is_allowed(self.env.user, action, self):
+                if self.env.su:
+                    print(f"SU! {action} is authorized on {self} because SU!")
+                if self.env.su or oso.is_allowed(self.env.user, action, self):
                     _logger.debug(f"{action} is authorized on {self}")
                     return function(self, *args, **kwargs)
                 else:
@@ -79,10 +81,10 @@ class OsoModelAccess(models.Model):
         if self.env.su:
             return True
         oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, mode, model):
+        if (super().check(model, mode=mode, raise_exception=False) or
+            oso.is_allowed(self.env.user, mode, model)):
             return True
         elif raise_exception:
             raise AccessError(f"model access check failed for {model}")
         else:
-            # for now, fall back to default odoo authorization if oso auth fails
-            return super().check(model, mode=mode, raise_exception=raise_exception)
+            return False

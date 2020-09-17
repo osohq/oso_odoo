@@ -1,8 +1,10 @@
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import AccessError
+from odoo.modules.module import get_resource_path
 
-from pathlib import Path
+from polar.exceptions import PolarRuntimeException
+
 
 # Tags required so that classes are registered with oso before tests.
 @tagged("-at_install", "post_install")
@@ -10,9 +12,12 @@ class TestOso(TransactionCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
         oso = self.env["oso"].oso
-        oso.clear()
-        mypath = Path(__file__).parent
-        oso.load_file(mypath / "test_policy.polar")
+        test_policy = get_resource_path("oso_auth", "tests", "test_policy.polar")
+        try:
+            oso.load_file(test_policy)
+        except PolarRuntimeException: # FIXME: more specific exception
+            # Duplicate file load.
+            pass
 
         user_demo = self.env.ref("base.user_demo")
         self.env = self.env(user=user_demo)
@@ -48,5 +53,5 @@ class TestOso(TransactionCase):
 
         group = self.env["res.groups"]
         with self.assertRaises(AccessError):
+            print(f"su: {self.env.su}")
             group.read()
-
