@@ -2,6 +2,7 @@
 
 from odoo import models, api, tools
 from odoo.exceptions import AccessError
+from odoo.modules.module import get_resource_path
 
 from oso import Oso, OsoException
 
@@ -16,9 +17,8 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        mypath = Path(__file__).parent.parent
-        policy = mypath / "security" / "base.polar"
-        self.oso.load_file(policy)
+        for policy in Path(get_resource_path("oso_auth", "security")).glob("*.polar"):
+            self.oso.load_file(str(policy))
 
 
 class OsoBase(models.AbstractModel):
