@@ -22,7 +22,6 @@ class Oso(models.AbstractModel):
 
 
 class OsoBase(models.AbstractModel):
-
     _inherit = "base"
 
     def create(self, *args, **kwargs):
@@ -54,14 +53,13 @@ class OsoBase(models.AbstractModel):
             raise AccessError("unlink not authorized by oso")
 
     def _register_hook(self):
-        # Get name of original model class
+        # Rewrite model name for Polar compatibility.
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
 
 
 class OsoModelAccess(models.Model):
-
     _inherit = "ir.model.access"
 
     @api.model
