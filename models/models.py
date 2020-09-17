@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 
+from functools import wraps
+from logging import getLogger
+from pathlib import Path
+
 from odoo import models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
 from oso import Oso, OsoException
 
-from pathlib import Path
+
+_logger = getLogger(__name__)
 
 
 class Oso(models.AbstractModel):
@@ -24,33 +29,36 @@ class Oso(models.AbstractModel):
 class OsoBase(models.AbstractModel):
     _inherit = "base"
 
+    def authorize(action):
+        def wrap(function):
+            @wraps(function)
+            def wrapper(self, *args, **kwargs):
+                oso = self.env["oso"].oso
+                if oso.is_allowed(self.env.user, action, self):
+                    _logger.debug(f"{action} is authorized on {self}")
+                    return function(self, *args, **kwargs)
+                else:
+                    raise AccessError(f"{action} is not authorized on {self}")
+
+            return wrapper
+
+        return wrap
+
+    @authorize("create")
     def create(self, *args, **kwargs):
-        oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, "create", self):
-            return super().create(*args, **kwargs)
-        else:
-            raise AccessError("create not authorized by oso")
+        return super().create(*args, **kwargs)
 
+    @authorize("read")
     def read(self, *args, **kwargs):
-        oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, "read", self):
-            return super().read(*args, **kwargs)
-        else:
-            raise AccessError("read not authorized by oso")
+        return super().read(*args, **kwargs)
 
+    @authorize("write")
     def write(self, *args, **kwargs):
-        oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, "write", self):
-            return super().write(*args, **kwargs)
-        else:
-            raise AccessError("write not authorized by oso")
+        return super().write(*args, **kwargs)
 
+    @authorize("unlink")
     def unlink(self, *args, **kwargs):
-        oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, "unlink", self):
-            return super().unlink(*args, **kwargs)
-        else:
-            raise AccessError("unlink not authorized by oso")
+        return super().unlink(*args, **kwargs)
 
     def _register_hook(self):
         # Rewrite model name for Polar compatibility.
