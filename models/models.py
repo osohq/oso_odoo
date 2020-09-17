@@ -22,8 +22,8 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        for policy in Path(get_resource_path("oso_auth", "security")).glob("*.polar"):
-            self.oso.load_file(str(policy))
+        policy = get_resource_path("oso_auth", "security", "base.polar")
+        self.oso.load_file(policy)
 
 
 class OsoBase(models.AbstractModel):
