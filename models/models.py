@@ -65,6 +65,7 @@ class OsoBase(models.AbstractModel):
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
+        _logger.debug(f"{name} is registered")
 
 
 class OsoModelAccess(models.Model):
