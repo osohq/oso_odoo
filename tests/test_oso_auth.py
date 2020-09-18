@@ -23,16 +23,14 @@ class TestOso(TransactionCase):
         good = self.env["test.model"].create({"good": True})
         good.read()
         bad = self.env["test.model"].create({"good": False})
-        with self.assertRaises(AccessError):
-            bad.read()
+        self.assertFalse(bad.read()._ids)
 
     def test_record_access(self):
         # negative test
         bad_mail_server = self.env["ir.mail_server"].create(
             {"name": "evil_mail", "smtp_host": "smtp.evil.org"}
         )
-        with self.assertRaises(AccessError):
-            bad_mail_server.read()
+        self.assertFalse(bad_mail_server.read()._ids)
         bad_mail_server.unlink()
 
         # positive test
@@ -56,6 +54,5 @@ class TestOso(TransactionCase):
         menu.unlink()
 
         group = self.env["res.groups"]
-        with self.assertRaises(AccessError):
-            group.read()
+        self.assertFalse(group.read()._ids)
 

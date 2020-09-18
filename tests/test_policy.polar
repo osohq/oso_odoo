@@ -26,8 +26,8 @@ role(user, role) if
     role = user.groups_id.get_xml_id().values();
 
 allow(actor, action, resource: ir::ui::menu) if
-    action in ["create", "write"] and
-    role(actor, "base.group_user");
+    action in ["create", "write", "unlink"];
+    #and role(actor, "base.group_user");
 
 allow(_actor, "read", resource: test::model) if
     resource.good;
