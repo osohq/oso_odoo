@@ -4,7 +4,7 @@ from functools import wraps
 from logging import getLogger
 from pathlib import Path
 
-from odoo import models, api, tools
+from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
@@ -29,36 +29,59 @@ class Oso(models.AbstractModel):
 class OsoBase(models.AbstractModel):
     _inherit = "base"
 
+    @api.model
+    def check_access_rights(self, operation, raise_exception=True):
+        """ Verifies that the operation given by ``operation`` is allowed for
+            the current user according to the access rights.
+        """
+
+        # Check for Odoo bypass rule
+        odoo_result = super().check_access_rights(operation, raise_exception=False)
+        if odoo_result:
+            return True
+
+        # Check oso
+        oso = self.env["oso"].oso
+        oso_result = oso.is_allowed(self.env.user, operation, self._name)
+        if oso_result:
+            return True
+
+        # finally, return False or create Odoo exception
+        # Alternatively: we could throw the exception
+        return super().check_access_rights(
+            operation, raise_exception=raise_exception)
+
+    def check_access_rule(self, operation):
+        """ Verifies that the operation given by ``operation`` is allowed for
+            the current user according to ir.rules.
+
+           :param operation: one of ``write``, ``unlink``
+           :raise UserError: * if current ir.rules do not permit this operation.
+           :return: None if the operation is allowed
+        """
+        oso = self.env["oso"].oso
+        if oso.is_allowed(self.env.user, operation, self):
+            _logger.debug(f"{operation} is authorized on {self}")
+            return None
+        else:
+            raise AccessError(f"{operation} is not authorized on {self}")
+
     def authorize(action):
         def wrap(function):
             @wraps(function)
             def wrapper(self, *args, **kwargs):
-                oso = self.env["oso"].oso
-                if oso.is_allowed(self.env.user, action, self):
-                    _logger.debug(f"{action} is authorized on {self}")
-                    return function(self, *args, **kwargs)
-                else:
-                    raise AccessError(f"{action} is not authorized on {self}")
-
+                self.check_access_rule(action)
+                return function(self, *args, **kwargs)
             return wrapper
-
         return wrap
-
-    @authorize("create")
-    def create(self, *args, **kwargs):
-        return super().create(*args, **kwargs)
 
     @authorize("read")
     def read(self, *args, **kwargs):
         return super().read(*args, **kwargs)
 
-    @authorize("write")
-    def write(self, *args, **kwargs):
-        return super().write(*args, **kwargs)
-
-    @authorize("unlink")
-    def unlink(self, *args, **kwargs):
-        return super().unlink(*args, **kwargs)
+    @authorize("read")
+    def search(self, *args, **kwargs):
+        return super().search(*args, **kwargs)
 
     def _register_hook(self):
         # Rewrite model name for Polar compatibility.
@@ -68,21 +91,28 @@ class OsoBase(models.AbstractModel):
         _logger.debug(f"{name} is registered")
 
 
-class OsoModelAccess(models.Model):
-    _inherit = "ir.model.access"
+# class OsoModelAccess(models.Model):
+#     _inherit = "ir.model.access"
 
-    @api.model
-    @tools.ormcache_context(
-        "self._uid", "model", "mode", "raise_exception", keys=("lang",)
-    )
-    def check(self, model, mode="read", raise_exception=True):
-        if self.env.su:
-            return True
-        oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, mode, model):
-            return True
-        elif raise_exception:
-            raise AccessError(f"model access check failed for {model}")
-        else:
-            # for now, fall back to default odoo authorization if oso auth fails
-            return super().check(model, mode=mode, raise_exception=raise_exception)
+#     @api.model
+#     @tools.ormcache_context(
+#         "self._uid", "model", "mode", "raise_exception", keys=("lang",)
+#     )
+#     def check(self, model, mode="read", raise_exception=True):
+#         if self.env.su:
+#             return True
+#         oso = self.env["oso"].oso
+#         if oso.is_allowed(self.env.user, mode, model):
+#             return True
+#         elif raise_exception:
+#             raise AccessError(f"model access check failed for {model}")
+#         else:
+#             # for now, fall back to default odoo authorization if oso auth fails
+#             return super().check(model, mode=mode, raise_exception=raise_exception)
+
+
+class TestModel(models.Model):
+    _name = "test.model"
+    _description = "Model for testing"
+
+    good = fields.Boolean()

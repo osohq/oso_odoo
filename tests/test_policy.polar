@@ -29,3 +29,9 @@ allow(actor, action, resource: ir::ui::menu) if
     action in ["create", "write"] and
     role(actor, "base.group_user");
 
+allow(_actor, "read", resource: test::model) if
+    resource.good;
+
+allow(_actor, "create", resource: test::model);
+
+allow(_actor, _action, "test.model");

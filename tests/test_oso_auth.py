@@ -1,8 +1,10 @@
+from odoo import models
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import AccessError
 
 from pathlib import Path
+
 
 # Tags required so that classes are registered with oso before tests.
 @tagged("-at_install", "post_install")
@@ -16,6 +18,13 @@ class TestOso(TransactionCase):
 
         user_demo = self.env.ref("base.user_demo")
         self.env = self.env(user=user_demo)
+
+    def test_model(self):
+        good = self.env["test.model"].create({"good": True})
+        good.read()
+        bad = self.env["test.model"].create({"good": False})
+        with self.assertRaises(AccessError):
+            bad.read()
 
     def test_record_access(self):
         # negative test
