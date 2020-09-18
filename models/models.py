@@ -70,8 +70,14 @@ class OsoBase(models.AbstractModel):
         def wrap(function):
             @wraps(function)
             def wrapper(self, *args, **kwargs):
-                self.check_access_rule(action)
-                return function(self, *args, **kwargs)
+                # Odoo will filter transient data whose create_uid != self._uid.
+                results = function(self, *args, **kwargs)
+                if self.env.su or self._transient:
+                    return results
+
+                oso = self.env["oso"].oso
+                user = self.env.user
+                return self.filtered(lambda record: oso.is_allowed(user, action, record))
             return wrapper
         return wrap
 
