@@ -23,7 +23,11 @@ class Oso(models.AbstractModel):
         super().__init__(*args, **kwargs)
 
         policy = get_resource_path("oso_auth", "security", "base.polar")
-        self.oso.load_file(policy)
+        try:
+            self.oso.load_file(policy)
+        except OsoException as e:
+            _logger.exception(e)
+            pass
 
 
 class OsoBase(models.AbstractModel):
@@ -77,7 +81,17 @@ class OsoBase(models.AbstractModel):
 
                 oso = self.env["oso"].oso
                 user = self.env.user
-                return self.filtered(lambda record: oso.is_allowed(user, action, record))
+
+                # sometimes Odoo returns a list as the result type
+                allow_filter = lambda record: oso.is_allowed(user, action, record)
+                if isinstance(results, models.AbstractModel):
+                    return results.filtered(allow_filter)
+                elif isinstance(results, list):
+                    return list(filter(allow_filter, results))
+                else:
+                    _logger.warning(f"filtering something which isn't a list nor a model: {results}")
+                    return results
+
             return wrapper
         return wrap
 
