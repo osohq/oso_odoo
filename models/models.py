@@ -111,26 +111,6 @@ class OsoBase(models.AbstractModel):
         _logger.debug(f"{name} is registered")
 
 
-# class OsoModelAccess(models.Model):
-#     _inherit = "ir.model.access"
-
-#     @api.model
-#     @tools.ormcache_context(
-#         "self._uid", "model", "mode", "raise_exception", keys=("lang",)
-#     )
-#     def check(self, model, mode="read", raise_exception=True):
-#         if self.env.su:
-#             return True
-#         oso = self.env["oso"].oso
-#         if oso.is_allowed(self.env.user, mode, model):
-#             return True
-#         elif raise_exception:
-#             raise AccessError(f"model access check failed for {model}")
-#         else:
-#             # for now, fall back to default odoo authorization if oso auth fails
-#             return super().check(model, mode=mode, raise_exception=raise_exception)
-
-
 class TestModel(models.Model):
     _name = "test.model"
     _description = "Model for testing"
