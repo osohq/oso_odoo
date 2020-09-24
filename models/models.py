@@ -28,36 +28,38 @@ class Oso(models.AbstractModel):
 
 class OsoBase(models.AbstractModel):
     _inherit = "base"
+    _description = "Model- and record-level access control with oso"
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
-        """ Verifies that the operation given by ``operation`` is allowed for
-            the current user according to the access rights.
+        """Verifies that the operation given by ``operation`` is allowed
+           for the current user according to the current oso policy.
         """
 
-        # Check for Odoo bypass rule
+        # Check for Odoo bypass rule.
         odoo_result = super().check_access_rights(operation, raise_exception=False)
         if odoo_result:
             return True
 
-        # Check oso
+        # Check oso.
         oso = self.env["oso"].oso
         oso_result = oso.is_allowed(self.env.user, operation, self._name)
         if oso_result:
             return True
 
-        # finally, return False or create Odoo exception
-        # Alternatively: we could throw the exception
-        return super().check_access_rights(
-            operation, raise_exception=raise_exception)
+        if raise_exception:
+            raise AccessError(f"{self.env.user} does not have {operation} rights on {self}")
+        else:
+            return False
 
     def check_access_rule(self, operation):
-        """ Verifies that the operation given by ``operation`` is allowed for
-            the current user according to ir.rules.
+        """Verifies that the record-level operation given by ``operation``
+           is allowed for the current user according to the oso policy,
+           if record-level checks are enabled for this model.
 
-           :param operation: one of ``write``, ``unlink``
-           :raise UserError: * if current ir.rules do not permit this operation.
-           :return: None if the operation is allowed
+           :param operation: one of ``read``, ``write``, ``create``, or ``unlink``.
+           :raise AccessError: if the policy does not permit this operation.
+           :return: None if the operation is allowed.
         """
         oso = self.env["oso"].oso
         if oso.is_allowed(self.env.user, operation, self):
@@ -85,7 +87,7 @@ class OsoBase(models.AbstractModel):
                 elif isinstance(results, list):
                     return list(filter(allow_filter, results))
                 else:
-                    _logger.warning(f"filtering something which isn't a list nor a model: {results}")
+                    _logger.warning(f"neither list nor model: {results}")
                     return results
 
             return wrapper
