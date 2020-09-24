@@ -1,1 +1,1 @@
-from . import test_oso_auth
+from . import test_oso_odoo

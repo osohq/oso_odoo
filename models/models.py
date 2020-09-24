@@ -22,12 +22,11 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        policy = get_resource_path("oso_auth", "security", "base.polar")
+        policy = get_resource_path("oso_odoo", "security", "base.polar")
         try:
             self.oso.load_file(policy)
         except OsoException as e:
             _logger.exception(e)
-            pass
 
 
 class OsoBase(models.AbstractModel):

@@ -2,6 +2,7 @@ from odoo import models
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import AccessError
+from odoo.modules.module import get_resource_path
 
 from pathlib import Path
 
@@ -12,9 +13,8 @@ class TestOso(TransactionCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
         oso = self.env["oso"].oso
-        oso.clear()
-        mypath = Path(__file__).parent
-        oso.load_file(mypath / "test_policy.polar")
+        test_policy = get_resource_path("oso_odoo", "tests", "test_policy.polar")
+        oso.load_file(test_policy)
 
         user_demo = self.env.ref("base.user_demo")
         self.env = self.env(user=user_demo)

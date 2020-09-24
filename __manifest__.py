@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "oso_auth",
-    "summary": "oso authorization library",
+    "name": "oso_odoo",
+    "summary": "oso authorization module for odoo",
     "description": "oso is an open source policy engine for authorization that you embed in your application",
     "author": "oso",
     "website": "https://www.osohq.com/",
