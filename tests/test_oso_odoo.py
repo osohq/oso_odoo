@@ -13,6 +13,7 @@ class TestOso(TransactionCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
         oso = self.env["oso"].oso
+        oso.clear_rules()
         test_policy = get_resource_path("oso_odoo", "tests", "test_policy.polar")
         oso.load_file(test_policy)
 

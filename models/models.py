@@ -8,7 +8,7 @@ from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
-from oso import Oso, OsoException
+from oso import Oso
 
 
 _logger = getLogger(__name__)
@@ -23,10 +23,7 @@ class Oso(models.AbstractModel):
         super().__init__(*args, **kwargs)
 
         policy = get_resource_path("oso_odoo", "security", "base.polar")
-        try:
-            self.oso.load_file(policy)
-        except OsoException as e:
-            _logger.exception(e)
+        self.oso.load_file(policy)
 
 
 class OsoBase(models.AbstractModel):
