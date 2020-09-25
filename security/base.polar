@@ -1,2 +1,1 @@
-# allow everything
-allow(_actor, _action, _resource);
+# Deny everything by default.
