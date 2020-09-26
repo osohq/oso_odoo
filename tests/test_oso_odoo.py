@@ -4,7 +4,7 @@ from odoo.tests import tagged
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
-from ..models.models import OsoTestModel
+from ..models.oso import OsoTestModel
 
 from pathlib import Path
 
