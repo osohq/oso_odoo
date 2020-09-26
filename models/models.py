@@ -14,12 +14,10 @@ from oso import Oso
 _logger = getLogger(__name__)
 
 
-class Oso(models.Model):
+class Oso(models.AbstractModel):
     _name = "oso"
-    _description = "global oso state"
+    _description = "oso authorization engine and global state"
     oso = Oso()
-
-    checked = fields.Many2one('ir.model', string='Object', required=True, domain=[('transient', '=', False)], index=True, ondelete='cascade')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,21 +28,27 @@ class Oso(models.Model):
     def is_allowed(self, actor, action, resource):
         return self.oso.is_allowed(actor, action, resource)
 
+class OsoModelAccess(models.Model):
+    _name = "oso.model.access"
+    _description = "selectively enable access control with oso"
+
+    checked = fields.Many2one('ir.model', string='Object', required=True, domain=[('transient', '=', False)], index=True, ondelete='cascade')
+
     def is_checked(self, model_name):
-        query = """SELECT 1 FROM oso
-                   JOIN ir_model ON (ir_model.id = oso.checked)
-                   WHERE ir_model.model=%s"""
+        query = """SELECT 1 FROM oso_model_access o
+                   JOIN ir_model m ON (m.id = o.checked)
+                   WHERE m.model=%s"""
         self._cr.execute(query, (model_name,))
         return bool(self._cr.rowcount)
 
 class OsoBase(models.AbstractModel):
     _inherit = "base"
-    _description = "Model- and record-level access control with oso"
+    _description = "model- and record-level access control with oso"
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
-        """Verifies that the operation given by ``operation`` is allowed
-           for the current user according to the current oso policy.
+        """Verifies that the model-level operation is allowed for
+           the current user according to the current oso policy.
         """
 
         # Check for Odoo bypass rule.
@@ -64,18 +68,18 @@ class OsoBase(models.AbstractModel):
             return False
 
     def check_access_rule(self, operation):
-        """Verifies that the record-level operation given by ``operation``
-           is allowed for the current user according to the oso policy,
-           if record-level checks are enabled for this model.
+        """If access control with oso is enabled for the model,
+           verifies that the record-level operation is allowed for
+           the current user according to the oso policy. Otherwise,
+           defaults to the Odoo ir.rules mechanism.
 
            :param operation: one of ``read``, ``write``, ``create``, or ``unlink``.
            :raise AccessError: if the policy does not permit this operation.
            :return: None if the operation is allowed.
         """
-        oso = self.env["oso"]
-        if not oso.is_checked(self._name):
+        if not self.env["oso.model.access"].is_checked(self._name):
             return super().check_access_rule(operation)
-        elif oso.is_allowed(self.env.user, operation, self):
+        elif self.env["oso"].is_allowed(self.env.user, operation, self):
             _logger.debug(f"{operation} is authorized on {self}")
             return None
         else:
@@ -86,7 +90,7 @@ class OsoBase(models.AbstractModel):
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
-        _logger.debug(f"{name} is registered")
+        _logger.debug(f"registered class {name}")
 
 
 class OsoTestModel(models.Model):

@@ -8,5 +8,8 @@
     "category": "Security",
     "version": "0.1",
     "depends": ["base"],
-    "data": ["security/oso.csv"],
+    "data": [
+        "security/ir.model.access.csv",
+        "security/oso.model.access.csv",
+    ],
 }
