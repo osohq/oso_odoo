@@ -1,2 +1,3 @@
 id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
-access_oso_auth_oso_auth,oso_auth.oso_auth,model_oso_auth_oso_auth,base.group_user,1,1,1,1
+access_oso,access_oso,model_oso_model_access,base.group_user,1,0,0,0
+access_oso_test_model,access_oso_test_model,model_oso_test_model,base.group_user,1,0,0,0

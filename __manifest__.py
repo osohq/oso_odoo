@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 {
     "name": "oso_odoo",
-    "summary": "oso authorization library",
+    "summary": "oso authorization module for odoo",
     "description": "oso is an open source policy engine for authorization that you embed in your application",
     "author": "oso",
     "website": "https://www.osohq.com/",
@@ -10,9 +10,7 @@
     "depends": ["base"],
     "data": [
         "views/actions.xml",
-    ],
-    # only loaded in demonstration mode
-    "demo": [
-        "demo/demo.xml",
+        "security/ir.model.access.csv",
+        "security/oso.model.access.csv",
     ],
 }
