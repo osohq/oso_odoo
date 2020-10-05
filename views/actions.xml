@@ -1,0 +1,13 @@
+<odoo>
+    <data>
+        <record model="ir.actions.server" id="action_reload_oso_policies">
+            <field name="name">Reload oso policies</field>
+            <field name="model_id" ref="model_oso"/>
+            <field name="state">code</field>
+            <field name="code">
+            model.reload_policies()
+            </field>
+        </record>
+        <menuitem name="Reload Policy" id="oso_reload_policies" action="action_reload_oso_policies" sequence="99" parent=""/>
+    </data>
+</odoo>

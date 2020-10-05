@@ -1,3 +1,5 @@
+allow(_, _, _);
+
 allow(actor: Users { id: 2}, _action, resource: String);
 # Default allow for all base models that aren't UI menus
 allow(_actor, _action, resource: base) if

@@ -36,9 +36,11 @@ class Oso(models.AbstractModel):
         # self.host = self.oso.host
         # self.ffi_polar = self.oso.ffi_polar
         policies = Path(get_resource_path("oso-odoo", "security", "base.polar")).parent
+
         def load_file(file):
             if isfile(file) and file.suffix == ".polar":
                 self.oso.load_file(file)
+
         for f in listdir(policies):
             load_file(policies / f)
         for f in listdir(policies / "models"):
@@ -46,6 +48,8 @@ class Oso(models.AbstractModel):
         for f in listdir(policies / "views"):
             load_file(policies / "views" / f)
 
+    def reload_policies(self):
+        _logger.debug("Reloading policies")
 
 
 class OsoBase(models.AbstractModel):
@@ -53,8 +57,8 @@ class OsoBase(models.AbstractModel):
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
-        """ Verifies that the operation given by ``operation`` is allowed for
-            the current user according to the access rights.
+        """Verifies that the operation given by ``operation`` is allowed for
+        the current user according to the access rights.
         """
 
         # Check for Odoo bypass rule
@@ -68,22 +72,22 @@ class OsoBase(models.AbstractModel):
         if oso_result:
             return True
 
+        _logger.warning("Not authorized to {operation} on {self._name}")
         # finally, return False or create Odoo exception
         # Alternatively: we could throw the exception
-        return super().check_access_rights(
-            operation, raise_exception=raise_exception)
+        return super().check_access_rights(operation, raise_exception=raise_exception)
 
     def check_access_rule(self, operation):
-        """ Verifies that the operation given by ``operation`` is allowed for
-            the current user according to ir.rules.
+        """Verifies that the operation given by ``operation`` is allowed for
+         the current user according to ir.rules.
 
-           :param operation: one of ``write``, ``unlink``
-           :raise UserError: * if current ir.rules do not permit this operation.
-           :return: None if the operation is allowed
+        :param operation: one of ``write``, ``unlink``
+        :raise UserError: * if current ir.rules do not permit this operation.
+        :return: None if the operation is allowed
         """
-        _logger.info(f"Authorizing: {operation} on {self}")
+        _logger.debug(f"Authorizing: {operation} on {self}")
         if self.env.su or self._transient:
-            _logger.info(f"{operation} is authorized on {self} via sudo")
+            _logger.debug(f"{operation} is authorized on {self} via sudo")
             return None
 
         sudo_self = self.sudo()
@@ -91,7 +95,7 @@ class OsoBase(models.AbstractModel):
         resource_list = list(sudo_self)
         # filtered = oso.query_rule("filter_allow", sudo_self.env.user, operation, resource_list, oso.Variable("filtered"))
         if oso.is_allowed(sudo_self.env.user, operation, sudo_self):
-            _logger.info(f"{operation} is authorized on {self}")
+            _logger.debug(f"{operation} is authorized on {self}")
             return None
         else:
             raise AccessError(f"{operation} is not authorized on {self}")
@@ -100,8 +104,11 @@ class OsoBase(models.AbstractModel):
         def wrap(function):
             @wraps(function)
             def wrapper(self, *args, **kwargs):
+                _logger.debug(f"Filtering {action} on {self}")
                 # Odoo will filter transient data whose create_uid != self._uid.
                 results = function(self, *args, **kwargs)
+                _logger.debug(f"Prefiltered {results}")
+
                 if self.env.su or self._transient:
                     return results
 
@@ -110,20 +117,23 @@ class OsoBase(models.AbstractModel):
 
                 # sometimes Odoo returns a list as the result type
                 allow_filter = lambda record: oso.is_allowed(user, action, record)
-                _logger.info(f"Filtering {action} on {results}")
                 # if isinstance(results, dict) or isinstance(results, list) and isinstance(results[0], dict):
                 #     import pdb; pdb.set_trace()
                 if isinstance(results, models.AbstractModel):
                     results = results.filtered(allow_filter)
+                    _logger.debug(f"Filtered: {results}")
                 elif isinstance(results, list):
                     # results = list(filter(allow_filter, results))
                     # lets not filter these
                     pass
                 else:
-                    _logger.warning(f"filtering something which isn't a list nor a model: {results}")
-                _logger.info(f"Filtered: {results}")
+                    _logger.warning(
+                        f"filtering something which isn't a list nor a model: {results}"
+                    )
                 return results
+
             return wrapper
+
         return wrap
 
     @authorize("read")
@@ -139,7 +149,32 @@ class OsoBase(models.AbstractModel):
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
-        _logger.info(f"{name} is registered")
+        _logger.debug(f"{name} is registered")
+
+
+class IrModelAccess(models.Model):
+    _inherit = "ir.model.access"
+
+    @api.model
+    @tools.ormcache_context(
+        "self._uid", "model", "mode", "raise_exception", keys=("lang",)
+    )
+    def check(self, model, mode="read", raise_exception=True):
+        # Check for Odoo bypass rule
+        odoo_result = super().check(model, mode, raise_exception=False)
+        if odoo_result:
+            return True
+
+        # Check oso
+        oso = self.env["oso"].oso
+        oso_result = oso.is_allowed(self.env.user, model, model)
+        if oso_result:
+            return True
+
+        _logger.warning("Not authorized to {operation} on {model}")
+        # finally, return False or create Odoo exception
+        # Alternatively: we could throw the exception
+        return super().check(model, mode, raise_exception)
 
 
 class TestModel(models.Model):
