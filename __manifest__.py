@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 {
-    "name": "oso_auth",
+    "name": "oso_odoo",
     "summary": "oso authorization library",
     "description": "oso is an open source policy engine for authorization that you embed in your application",
     "author": "oso",

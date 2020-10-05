@@ -2,7 +2,10 @@
 
 from functools import wraps
 from logging import getLogger
+from os import listdir
+from os.path import isfile
 from pathlib import Path
+
 
 from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
@@ -22,12 +25,27 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        policy = get_resource_path("oso_auth", "security", "base.polar")
         try:
-            self.oso.load_file(policy)
+            self.load_policies()
         except OsoException as e:
             _logger.exception(e)
             pass
+
+    def load_policies(self):
+        # self.oso.clear_rules()
+        # self.host = self.oso.host
+        # self.ffi_polar = self.oso.ffi_polar
+        policies = Path(get_resource_path("oso-odoo", "security", "base.polar")).parent
+        def load_file(file):
+            if isfile(file) and file.suffix == ".polar":
+                self.oso.load_file(file)
+        for f in listdir(policies):
+            load_file(policies / f)
+        for f in listdir(policies / "models"):
+            load_file(policies / "models" / f)
+        for f in listdir(policies / "views"):
+            load_file(policies / "views" / f)
+
 
 
 class OsoBase(models.AbstractModel):
@@ -63,9 +81,17 @@ class OsoBase(models.AbstractModel):
            :raise UserError: * if current ir.rules do not permit this operation.
            :return: None if the operation is allowed
         """
+        _logger.info(f"Authorizing: {operation} on {self}")
+        if self.env.su or self._transient:
+            _logger.info(f"{operation} is authorized on {self} via sudo")
+            return None
+
+        sudo_self = self.sudo()
         oso = self.env["oso"].oso
-        if oso.is_allowed(self.env.user, operation, self):
-            _logger.debug(f"{operation} is authorized on {self}")
+        resource_list = list(sudo_self)
+        # filtered = oso.query_rule("filter_allow", sudo_self.env.user, operation, resource_list, oso.Variable("filtered"))
+        if oso.is_allowed(sudo_self.env.user, operation, sudo_self):
+            _logger.info(f"{operation} is authorized on {self}")
             return None
         else:
             raise AccessError(f"{operation} is not authorized on {self}")
@@ -84,14 +110,19 @@ class OsoBase(models.AbstractModel):
 
                 # sometimes Odoo returns a list as the result type
                 allow_filter = lambda record: oso.is_allowed(user, action, record)
+                _logger.info(f"Filtering {action} on {results}")
+                # if isinstance(results, dict) or isinstance(results, list) and isinstance(results[0], dict):
+                #     import pdb; pdb.set_trace()
                 if isinstance(results, models.AbstractModel):
-                    return results.filtered(allow_filter)
+                    results = results.filtered(allow_filter)
                 elif isinstance(results, list):
-                    return list(filter(allow_filter, results))
+                    # results = list(filter(allow_filter, results))
+                    # lets not filter these
+                    pass
                 else:
                     _logger.warning(f"filtering something which isn't a list nor a model: {results}")
-                    return results
-
+                _logger.info(f"Filtered: {results}")
+                return results
             return wrapper
         return wrap
 
@@ -108,7 +139,7 @@ class OsoBase(models.AbstractModel):
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
         oso.register_class(type(self), name=name)
-        _logger.debug(f"{name} is registered")
+        _logger.info(f"{name} is registered")
 
 
 class TestModel(models.Model):
