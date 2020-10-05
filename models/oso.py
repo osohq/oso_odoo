@@ -41,10 +41,6 @@ class Oso(models.AbstractModel):
 
         for f in listdir(policies):
             load_file(policies / f)
-        for f in listdir(policies / "models"):
-            load_file(policies / "models" / f)
-        for f in listdir(policies / "views"):
-            load_file(policies / "views" / f)
 
     def reload_policies(self):
         _logger.debug("Reloading policies")
@@ -53,26 +49,8 @@ class Oso(models.AbstractModel):
         return self.oso.is_allowed(actor, action, resource)
 
 
-class OsoModelAccess(models.Model):
-    _name = "oso.model.access"
-    _description = "selectively enable access control with oso"
+class IrModelAccess(models.Model):
     _inherit = "ir.model.access"
-
-    checked = fields.Many2one(
-        "ir.model",
-        string="Object",
-        required=True,
-        domain=[("transient", "=", False)],
-        index=True,
-        ondelete="cascade",
-    )
-
-    def is_checked(self, model_name):
-        query = """SELECT 1 FROM oso_model_access o
-                   JOIN ir_model m ON (m.id = o.checked)
-                   WHERE m.model=%s"""
-        self._cr.execute(query, (model_name,))
-        return bool(self._cr.rowcount)
 
     def _check_model_access_by_name(self, operation, model_name):
         # Check for Odoo bypass rule
@@ -101,6 +79,27 @@ class OsoModelAccess(models.Model):
             return res
 
 
+class OsoModelAccess(models.Model):
+    _name = "oso.model.access"
+    _description = "selectively enable access control with oso"
+
+    checked = fields.Many2one(
+        "ir.model",
+        string="Object",
+        required=True,
+        domain=[("transient", "=", False)],
+        index=True,
+        ondelete="cascade",
+    )
+
+    def is_checked(self, model_name):
+        query = """SELECT 1 FROM oso_model_access o
+                   JOIN ir_model m ON (m.id = o.checked)
+                   WHERE m.model=%s"""
+        self._cr.execute(query, (model_name,))
+        return bool(self._cr.rowcount)
+
+
 class OsoBase(models.AbstractModel):
     _inherit = "base"
     _description = "model- and record-level access control with oso"
@@ -110,16 +109,7 @@ class OsoBase(models.AbstractModel):
         """Verifies that the model-level operation is allowed for
         the current user according to the current oso policy.
         """
-        res = self.env["oso.model.access"]._check_model_access_by_name(
-            operation, self._name
-        )
-
-        if not res and raise_exception:
-            raise AccessError(
-                f"{self.env.user} does not have {operation} rights on {self}"
-            )
-        else:
-            return res
+        return self.env["ir.model.access"].check(operation, self._name, raise_exception)
 
     def check_access_rule(self, operation):
         """If access control with oso is enabled for the model,
@@ -150,6 +140,8 @@ class OsoBase(models.AbstractModel):
     #     def wrap(function):
     #         @wraps(function)
     #         def wrapper(self, *args, **kwargs):
+    #             if not self.env["oso.model.access"].is_checked(self._name):
+    #                 return super().check_access_rule(operation)
     #             self.check_access_rights("read")
 
     #             _logger.debug(f"Filtering {action} on {self}")
