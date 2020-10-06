@@ -2,14 +2,14 @@
 
 from functools import wraps
 from logging import getLogger
-from os import listdir
+from os import listdir, walk
 from os.path import isfile
 from pathlib import Path
 
 
 from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
-from odoo.modules.module import get_resource_path
+from odoo.modules import get_modules, get_resource_path
 
 from oso import Oso, OsoError
 
@@ -29,24 +29,31 @@ class Oso(models.AbstractModel):
 
     def load_policies(self):
         # TODO: use get_modules to walk all modules as well
-        policies = Path(get_resource_path("oso_odoo", "security", "base.polar")).parent
 
         def load_file(file):
             if isfile(file) and file.suffix == ".polar":
                 try:
+                    _logger.debug(f"Loading policy file: {file}")
                     self.oso.load_file(file)
                 except OsoError as e:
                     _logger.exception(e)
                     pass
 
-        for f in listdir(policies):
-            load_file(policies / f)
+        _logger.debug(f"Got modules: {get_modules()}")
+        for module in get_modules():
+            policy_dir = get_resource_path(module, "policy")
+
+            if policy_dir:
+                for root, dirs, files in walk(policy_dir):
+                    for f in files:
+                        _logger.debug(f"Load file: {Path(root) / f}")
+                        load_file(Path(root) / f)
 
     def reload_policies(self):
         _logger.debug("Reloading policies")
 
-    def is_allowed(self, actor, action, resource):
-        return self.oso.is_allowed(actor, action, resource)
+    def authorize(self, action, resource):
+        return self.oso.is_allowed(self.env.user, action, resource)
 
 
 class IrModelAccess(models.Model):
@@ -59,11 +66,11 @@ class IrModelAccess(models.Model):
             return True
 
         # Check oso policy
-        oso_result = self.env["oso"].is_allowed(self.env.user, operation, model_name)
+        oso_result = self.env["oso"].authorize(operation, model_name)
         if oso_result:
             return True
 
-        _logger.warning("Not authorized to {operation} on {model}")
+        _logger.warning(f"Not authorized to {operation} on {model_name}")
         return False
 
     @api.model
@@ -76,6 +83,7 @@ class IrModelAccess(models.Model):
         if not res and raise_exception:
             raise AccessError(f"{self.env.user} does not have {mode} rights on {model}")
         else:
+            _logger.debug(f'{mode} is {"" if res else "not "}authorized on {model}')
             return res
 
 
@@ -123,7 +131,7 @@ class OsoBase(models.AbstractModel):
         """
         if not self.env["oso.model.access"].is_checked(self._name):
             return super().check_access_rule(operation)
-        elif self.env["oso"].is_allowed(self.env.user, operation, self):
+        elif self.env["oso"].authorize(operation, self):
             _logger.debug(f"{operation} is authorized on {self}")
             return None
         else:
@@ -136,50 +144,46 @@ class OsoBase(models.AbstractModel):
         oso.register_class(type(self), name=name)
         _logger.debug(f"registered class {name}")
 
-    # def authorize(action):
-    #     def wrap(function):
-    #         @wraps(function)
-    #         def wrapper(self, *args, **kwargs):
-    #             if not self.env["oso.model.access"].is_checked(self._name):
-    #                 return super().check_access_rule(operation)
-    #             self.check_access_rights("read")
+    def authorize(action):
+        def wrap(function):
+            @wraps(function)
+            def wrapper(self, *args, **kwargs):
+                self.check_access_rights("read")
 
-    #             _logger.debug(f"Filtering {action} on {self}")
-    #             # Odoo will filter transient data whose create_uid != self._uid.
-    #             results = function(self, *args, **kwargs)
-    #             _logger.debug(f"Prefiltered {results}")
+                _logger.debug(f"Filtering {action} on {self}")
+                # Odoo will filter transient data whose create_uid != self._uid.
+                results = function(self, *args, **kwargs)
+                if not self.env["oso.model.access"].is_checked(self._name):
+                    return results
 
-    #             if self.env.su or self._transient:
-    #                 return results
+                if self.env.su or self._transient:
+                    return results
 
-    #             user = self.env.user
+                user = self.env.user
 
-    #             # sometimes Odoo returns a list as the result type
-    #             allow_filter = lambda record: self.env["oso"].is_allowed(
-    #                 user, action, record
-    #             )
-    #             if isinstance(results, models.AbstractModel):
-    #                 results = results.filtered(allow_filter)
-    #                 _logger.debug(f"Filtered: {results}")
-    #             elif isinstance(results, list):
-    #                 pass
-    #             else:
-    #                 _logger.warning(
-    #                     f"filtering something which isn't a list nor a model: {results}"
-    #                 )
-    #             return results
+                # sometimes Odoo returns a list as the result type
+                allow_filter = lambda record: self.env["oso"].authorize(action, record)
+                if isinstance(results, models.AbstractModel):
+                    results = results.filtered(allow_filter)
+                elif isinstance(results, list):
+                    pass
+                else:
+                    _logger.warning(
+                        f"filtering something which isn't a list nor a model: {results}"
+                    )
+                return results
 
-    #         return wrapper
+            return wrapper
 
-    #     return wrap
+        return wrap
 
-    # @authorize("read")
-    # def read(self, *args, **kwargs):
-    #     return super().read(*args, **kwargs)
+    @authorize("read")
+    def read(self, *args, **kwargs):
+        return super().read(*args, **kwargs)
 
-    # @authorize("read")
-    # def search(self, *args, **kwargs):
-    #     return super().search(*args, **kwargs)
+    @authorize("read")
+    def search(self, *args, **kwargs):
+        return super().search(*args, **kwargs)
 
 
 class OsoTestModel(models.Model):
