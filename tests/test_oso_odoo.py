@@ -25,7 +25,7 @@ class TestOso(TransactionCase):
     def test_model(self):
         good = self.env["oso.test.model"].create({"good": True})
         self.assertTrue(isinstance(good, OsoTestModel))
-        self.assertTrue(good.read(["good"]))
+        good.read(["good"])
         with self.assertRaises(AccessError):
             good.write({})
         good.unlink()
