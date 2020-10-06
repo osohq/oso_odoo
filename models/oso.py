@@ -109,7 +109,7 @@ class OsoBase(models.AbstractModel):
         """Verifies that the model-level operation is allowed for
         the current user according to the current oso policy.
         """
-        return self.env["ir.model.access"].check(operation, self._name, raise_exception)
+        return self.env["ir.model.access"].check(self._name, operation, raise_exception)
 
     def check_access_rule(self, operation):
         """If access control with oso is enabled for the model,
