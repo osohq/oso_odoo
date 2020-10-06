@@ -30,7 +30,7 @@ class Oso(models.AbstractModel):
         self.load_policies()
 
     def load_policies(self):
-        # TODO: use get_modules to walk all modules as well
+        """Walks all modules and loads and .polar policy files found"""
 
         def load_file(file):
             if isfile(file) and file.suffix == ".polar":
@@ -52,7 +52,7 @@ class Oso(models.AbstractModel):
                         load_file(Path(root) / f)
 
     def reload_policies(self):
-        # TODO: replace with clear_rules
+        # TODO: replace with clear_rules once stabilised
         _logger.info("Reloading policies")
         polar = Polar()
         classes = {
@@ -168,32 +168,6 @@ class OsoBase(models.AbstractModel):
         oso.register_class(type(self), name=name)
         _logger.debug(f"registered class {name}")
 
-    def authorize(action):
-        def wrap(function):
-            @wraps(function)
-            def wrapper(self, *args, **kwargs):
-                self.check_access_rights("read")
-                results = self
-                if not self.env.su and self.env["oso.model.access"].is_checked(
-                    self._name
-                ):
-                    _logger.debug(f"Authorizing {action} on {results}")
-                    user = self.env.user
-                    allow_filter = lambda record: self.env["oso"].authorize(
-                        action, record.sudo()
-                    )
-                    results = results.filtered(allow_filter)
-                # else:
-                # _logger.debug(f"Skipping authorization for {self._name}")
-
-                results = function(results, *args, **kwargs)
-
-                return results
-
-            return wrapper
-
-        return wrap
-
     @authorize("read")
     def read(self, *args, **kwargs):
         return super().read(*args, **kwargs)
@@ -202,6 +176,32 @@ class OsoBase(models.AbstractModel):
     def search(self, *args, **kwargs):
         return super().search(*args, **kwargs)
 
+# Decorator used to wrap base models
+def authorize(action):
+    def wrap(function):
+        @wraps(function)
+        def wrapper(self, *args, **kwargs):
+            self.check_access_rights("read")
+            results = self
+            if not self.env.su and self.env["oso.model.access"].is_checked(
+                self._name
+            ):
+                _logger.debug(f"Authorizing {action} on {results}")
+                user = self.env.user
+                allow_filter = lambda record: self.env["oso"].authorize(
+                    action, record.sudo()
+                )
+                results = results.filtered(allow_filter)
+            # else:
+            # _logger.debug(f"Skipping authorization for {self._name}")
+
+            results = function(results, *args, **kwargs)
+
+            return results
+
+        return wrapper
+
+    return wrap
 
 class OsoTestModel(models.Model):
     _name = "oso.test.model"

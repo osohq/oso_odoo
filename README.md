@@ -1,6 +1,6 @@
-# oso_auth
+# oso_odoo
 
-oso's Odoo module
+oso support for Odoo
 
 ## Installation
 
@@ -13,14 +13,14 @@ $ git clone https://github.com/osohq/oso-odoo.git oso_odoo
 ```
 
 The module should now be in your Odoo addons path. To install the module through the Odoo web interface,
-search for "oso_auth" on the "Apps" page, making sure to clear the "Apps" filter:
+search for "oso_odoo" on the "Apps" page, making sure to clear the "Apps" filter:
 
 ![The odoo search box](images/odoo_search.png)
 
-Click "install" on the "oso_auth" tile.
+Click "install" on the "oso_odoo" tile.
 
 You can also install the module on the command line using `odoo-bin`:
 
 ```shell
-$ odoo-bin -i oso_auth -d <database>
+$ odoo-bin -i oso_odoo -d <database>
 ```
