@@ -11,6 +11,8 @@ from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules import get_modules, get_resource_path
 
+import polar
+from polar import Polar
 from oso import Oso, OsoError
 
 
@@ -35,7 +37,7 @@ class Oso(models.AbstractModel):
                 try:
                     _logger.debug(f"Loading policy file: {file}")
                     self.oso.load_file(file)
-                except OsoError as e:
+                except polar.exceptions.FileLoadingError as e:
                     _logger.exception(e)
                     pass
 
@@ -50,10 +52,29 @@ class Oso(models.AbstractModel):
                         load_file(Path(root) / f)
 
     def reload_policies(self):
-        _logger.debug("Reloading policies")
+        # TODO: replace with clear_rules
+        _logger.info("Reloading policies")
+        polar = Polar()
+        classes = {
+            k: v
+            for k, v in self.oso.host.classes.items()
+            if k not in polar.host.classes
+        }
+        constructors = {
+            k: v
+            for k, v in self.oso.host.constructors.items()
+            if k not in polar.host.constructors
+        }
+
+        polar = Polar(
+            classes=classes,
+            constructors=constructors,
+        )
+        self.oso.host = polar.host
+        self.oso.ffi_polar = polar.ffi_polar
 
     def authorize(self, action, resource):
-        return self.oso.is_allowed(self.env.user, action, resource)
+        return self.sudo().oso.is_allowed(self.sudo().env.user, action, resource)
 
 
 class IrModelAccess(models.Model):
@@ -101,6 +122,7 @@ class OsoModelAccess(models.Model):
     )
 
     def is_checked(self, model_name):
+        # TODO: This should really be cached
         query = """SELECT 1 FROM oso_model_access o
                    JOIN ir_model m ON (m.id = o.checked)
                    WHERE m.model=%s"""
@@ -131,6 +153,8 @@ class OsoBase(models.AbstractModel):
         """
         if not self.env["oso.model.access"].is_checked(self._name):
             return super().check_access_rule(operation)
+        elif self.env.su:
+            return None
         elif self.env["oso"].authorize(operation, self):
             _logger.debug(f"{operation} is authorized on {self}")
             return None
@@ -149,28 +173,21 @@ class OsoBase(models.AbstractModel):
             @wraps(function)
             def wrapper(self, *args, **kwargs):
                 self.check_access_rights("read")
-
-                _logger.debug(f"Filtering {action} on {self}")
-                # Odoo will filter transient data whose create_uid != self._uid.
-                results = function(self, *args, **kwargs)
-                if not self.env["oso.model.access"].is_checked(self._name):
-                    return results
-
-                if self.env.su or self._transient:
-                    return results
-
-                user = self.env.user
-
-                # sometimes Odoo returns a list as the result type
-                allow_filter = lambda record: self.env["oso"].authorize(action, record)
-                if isinstance(results, models.AbstractModel):
-                    results = results.filtered(allow_filter)
-                elif isinstance(results, list):
-                    pass
-                else:
-                    _logger.warning(
-                        f"filtering something which isn't a list nor a model: {results}"
+                results = self
+                if not self.env.su and self.env["oso.model.access"].is_checked(
+                    self._name
+                ):
+                    _logger.debug(f"Authorizing {action} on {results}")
+                    user = self.env.user
+                    allow_filter = lambda record: self.env["oso"].authorize(
+                        action, record.sudo()
                     )
+                    results = results.filtered(allow_filter)
+                # else:
+                # _logger.debug(f"Skipping authorization for {self._name}")
+
+                results = function(results, *args, **kwargs)
+
                 return results
 
             return wrapper
