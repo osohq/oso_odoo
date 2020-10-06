@@ -15,7 +15,7 @@ class TestOso(TransactionCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
         oso = self.env["oso"].oso
-        oso.clear_rules()
+        # oso.clear_rules()
         test_policy = get_resource_path("oso_odoo", "tests", "test_policy.polar")
         oso.load_file(test_policy)
 
@@ -25,7 +25,7 @@ class TestOso(TransactionCase):
     def test_model(self):
         good = self.env["oso.test.model"].create({"good": True})
         self.assertTrue(isinstance(good, OsoTestModel))
-        self.assertTrue(good.read(['good']))
+        self.assertTrue(good.read(["good"]))
         with self.assertRaises(AccessError):
             good.write({})
         good.unlink()

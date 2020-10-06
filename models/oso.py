@@ -11,7 +11,7 @@ from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
-from oso import Oso, OsoException
+from oso import Oso, OsoError
 
 
 _logger = getLogger(__name__)
@@ -29,13 +29,13 @@ class Oso(models.AbstractModel):
 
     def load_policies(self):
         # TODO: use get_modules to walk all modules as well
-        policies = Path(get_resource_path("oso-odoo", "security", "base.polar")).parent
+        policies = Path(get_resource_path("oso_odoo", "security", "base.polar")).parent
 
         def load_file(file):
             if isfile(file) and file.suffix == ".polar":
                 try:
                     self.oso.load_file(file)
-                except OsoException as e:
+                except OsoError as e:
                     _logger.exception(e)
                     pass
 

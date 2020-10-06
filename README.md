@@ -5,11 +5,11 @@ oso's Odoo module
 ## Installation
 
 `cd` into your Odoo addons directory of choice and clone the repository
-into a directory named `oso_auth`, e.g.
+into a directory named `oso_odoo`, e.g.
 
 ```shell
 $ cd odoo/addons
-$ git clone https://github.com/osohq/oso-odoo.git oso_auth
+$ git clone https://github.com/osohq/oso-odoo.git oso_odoo
 ```
 
 The module should now be in your Odoo addons path. To install the module through the Odoo web interface,
