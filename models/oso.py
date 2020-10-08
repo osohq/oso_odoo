@@ -74,9 +74,10 @@ class Oso(models.AbstractModel):
         self.oso.ffi_polar = polar.ffi_polar
         self.env['ir.rule'].clear_caches()
         self.env['ir.model.access'].clear_caches()
+        self.load_policies()
 
-    def authorize(self, action, resource):
-        return self.sudo().oso.is_allowed(self.sudo().env.user, action, resource)
+    def authorize(self, user, action, resource):
+        return self.oso.is_allowed(user, action, resource)
 
 
 class IrModelAccess(models.Model):
@@ -89,7 +90,7 @@ class IrModelAccess(models.Model):
             return True
 
         # Check oso policy
-        oso_result = self.env["oso"].authorize(operation, model_name)
+        oso_result = self.env["oso"].authorize(self.env.user, operation, model_name)
         if oso_result:
             return True
 
@@ -141,9 +142,7 @@ def authorize(action):
             results = self
             if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
                 _logger.debug(f"Authorizing {action} on {results}")
-                user = self.env.user
-                allow_filter = lambda record: self.env["oso"].authorize(
-                    action, record.sudo()
+                allow_filter = lambda record: self.env["oso"].authorize(self.env.user, action, record.sudo()
                 )
                 results = results.filtered(allow_filter)
             # else:
@@ -183,7 +182,7 @@ class OsoBase(models.AbstractModel):
             return super().check_access_rule(operation)
         elif self.env.su:
             return None
-        elif self.env["oso"].authorize(operation, self):
+        elif self.env["oso"].authorize(self.env.user, operation, self):
             _logger.debug(f"{operation} is authorized on {self}")
             return None
         else:
