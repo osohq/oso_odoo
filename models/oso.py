@@ -78,6 +78,7 @@ class Oso(models.AbstractModel):
 
     def authorize(self, user, action, resource):
         self.oso.register_constant("env", self.env)
+        self.oso.register_constant("context", dict(self.env.context))
         return self.oso.is_allowed(user, action, resource)
 
 
