@@ -72,6 +72,8 @@ class Oso(models.AbstractModel):
         )
         self.oso.host = polar.host
         self.oso.ffi_polar = polar.ffi_polar
+        self.env['ir.rule'].clear_caches()
+        self.env['ir.model.access'].clear_caches()
 
     def authorize(self, action, resource):
         return self.sudo().oso.is_allowed(self.sudo().env.user, action, resource)
