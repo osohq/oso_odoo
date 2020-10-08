@@ -77,6 +77,7 @@ class Oso(models.AbstractModel):
         self.load_policies()
 
     def authorize(self, user, action, resource):
+        self.oso.register_constant("env", self.env)
         return self.oso.is_allowed(user, action, resource)
 
 
