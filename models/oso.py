@@ -38,7 +38,7 @@ class Oso(models.AbstractModel):
                     _logger.debug(f"Loading policy file: {file}")
                     self.oso.load_file(file)
                 except polar.exceptions.FileLoadingError as e:
-                    _logger.exception(e)
+                    _logger.debug(e)
                     pass
 
         _logger.debug(f"Got modules: {get_modules()}")
@@ -72,13 +72,13 @@ class Oso(models.AbstractModel):
         )
         self.oso.host = polar.host
         self.oso.ffi_polar = polar.ffi_polar
-        self.env['ir.rule'].clear_caches()
-        self.env['ir.model.access'].clear_caches()
+        self.env["ir.rule"].clear_caches()
+        self.env["ir.model.access"].clear_caches()
         self.load_policies()
 
     def authorize(self, user, action, resource):
         self.oso.register_constant("env", self.env)
-        self.oso.register_constant("context", dict(self.env.context))
+        self.oso.register_constant("context", dict(self._context))
         return self.oso.is_allowed(user, action, resource)
 
 
@@ -136,32 +136,62 @@ class OsoModelAccess(models.Model):
 
 
 # Decorator used to wrap base models
-def authorize(action):
-    def wrap(function):
-        @wraps(function)
-        def wrapper(self, *args, **kwargs):
-            self.check_access_rights("read")
-            results = self
-            if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-                _logger.debug(f"Authorizing {action} on {results}")
-                allow_filter = lambda record: self.env["oso"].authorize(self.env.user, action, record.sudo()
-                )
-                results = results.filtered(allow_filter)
-            # else:
-            # _logger.debug(f"Skipping authorization for {self._name}")
+# def authorize(action):
+#     def wrap(function):
+#         @wraps(function)
+#         def wrapper(self, *args, **kwargs):
+#             self.check_access_rights("read")
+#             results = self
+#             results = function(results, *args, **kwargs)
+#             if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+#                 if not results.ids:
+#                     import pdb
 
-            results = function(results, *args, **kwargs)
+#                     pdb.set_trace()
+#                 _logger.info(f"Authorizing {action} on {results}")
+#                 allow_filter = lambda record: self.env["oso"].authorize(
+#                     self.env.user, action, record.sudo()
+#                 )
+#                 results = results.filtered(allow_filter)
+#             # else:
+#             # _logger.debug(f"Skipping authorization for {self._name}")
 
-            return results
+#             return results
 
-        return wrapper
+#         return wrapper
 
-    return wrap
+#     return wrap
 
 
 class OsoBase(models.AbstractModel):
     _inherit = "base"
     _description = "model- and record-level access control with oso"
+
+    # oso_perm_read = fields.Boolean(
+    #     "oso read permission",
+    #     default=True,
+    #     compute="_compute_read_perm",
+    #     readonly=True,
+    #     search="_search_read_perm",
+    # )
+
+    # @api.model
+    # def _search_read_perm(self, operator, value):
+    #     recs = self.search([]).filtered(lambda x: x.oso_perm_read is True)
+    #     if recs:
+    #         return [("id", "in", [x.id for x in recs])]
+
+    # @api.model
+    # @api.depends_context("uid", "oso")
+    # def _compute_read_perm(self):
+    #     if self.env["oso.model.access"].is_checked(self._name):
+    #         for record in self:
+    #             try:
+    #                 record.oso_perm_read = self.env["oso"].authorize(
+    #                     self.env.user, "read", record
+    #                 )
+    #             except Exception:
+    #                 pass
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
@@ -194,20 +224,36 @@ class OsoBase(models.AbstractModel):
         # Rewrite model name for Polar compatibility.
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
-        oso.register_class(type(self), name=name)
-        _logger.debug(f"registered class {name}")
+        try:
+            oso.register_class(type(self), name=name)
+            _logger.debug(f"registered class {name}")
+        except polar.exceptions.DuplicateClassAliasError as e:
+            _logger.debug(f"class {name} already registered")
 
-    @authorize("read")
+    def _filter_authorized(self):
+        results = self
+        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+            if not results.ids:
+                import pdb
+
+                pdb.set_trace()
+            _logger.info(f"Authorizing read on {results}")
+            allow_filter = lambda record: self.env["oso"].authorize(
+                self.env.user, "read", record.sudo()
+            )
+            results = results.filtered(allow_filter)
+        return results
+
     def read(self, *args, **kwargs):
-        return super().read(*args, **kwargs)
+        self.check_access_rights("read")
+        results = self._filter_authorized()
+        return super(OsoBase, results).read(*args, **kwargs)
 
-    @authorize("read")
-    def search(self, *args, **kwargs):
-        return super().search(*args, **kwargs)
-
-
-class OsoTestModel(models.Model):
-    _name = "oso.test.model"
-    _description = "Model for testing oso"
-
-    good = fields.Boolean()
+    def _search(self, arg, *other_args, **kwargs):
+        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+            # Get all IDs and filter down to just the authorized ones
+            filtered_ids = self.browse(super(OsoBase, self)._search([]))._filter_authorized().ids
+            # add it as a search filter
+            arg += [("id", "in", filtered_ids)]
+        results = super()._search(arg, *other_args, **kwargs)
+        return results

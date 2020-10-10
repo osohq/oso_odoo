@@ -13,4 +13,9 @@
         "security/ir.model.access.csv",
         "security/oso.model.access.csv",
     ],
+    "demo": [
+        "demo/oso.test.organization.csv",
+        "demo/oso.test.repository.csv",
+        "views/demo_views.xml",
+    ],
 }
