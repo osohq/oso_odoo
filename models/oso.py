@@ -136,31 +136,26 @@ class OsoModelAccess(models.Model):
 
 
 # Decorator used to wrap base models
-# def authorize(action):
-#     def wrap(function):
-#         @wraps(function)
-#         def wrapper(self, *args, **kwargs):
-#             self.check_access_rights("read")
-#             results = self
-#             results = function(results, *args, **kwargs)
-#             if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-#                 if not results.ids:
-#                     import pdb
+def authorize(action):
+    def wrap(function):
+        @wraps(function)
+        def wrapper(self, *args, **kwargs):
+            self.check_access_rights("read")
+            results = self
+            if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+                _logger.info(f"Authorizing {action} on {results}")
+                allow_filter = lambda record: self.env["oso"].authorize(
+                    self.env.user, action, record.sudo()
+                )
+                results = results.filtered(allow_filter)
 
-#                     pdb.set_trace()
-#                 _logger.info(f"Authorizing {action} on {results}")
-#                 allow_filter = lambda record: self.env["oso"].authorize(
-#                     self.env.user, action, record.sudo()
-#                 )
-#                 results = results.filtered(allow_filter)
-#             # else:
-#             # _logger.debug(f"Skipping authorization for {self._name}")
+            results = function(results, *args, **kwargs)
 
-#             return results
+            return results
 
-#         return wrapper
+        return wrapper
 
-#     return wrap
+    return wrap
 
 
 class OsoBase(models.AbstractModel):
@@ -230,30 +225,38 @@ class OsoBase(models.AbstractModel):
         except polar.exceptions.DuplicateClassAliasError as e:
             _logger.debug(f"class {name} already registered")
 
-    def _filter_authorized(self):
-        results = self
-        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-            if not results.ids:
-                import pdb
+    # def _filter_authorized(self):
+    #     results = self
+    #     if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+    #         if not results.ids:
+    #             import pdb
 
-                pdb.set_trace()
-            _logger.info(f"Authorizing read on {results}")
-            allow_filter = lambda record: self.env["oso"].authorize(
-                self.env.user, "read", record.sudo()
-            )
-            results = results.filtered(allow_filter)
-        return results
+    #             pdb.set_trace()
+    #         _logger.info(f"Authorizing read on {results}")
+    #         allow_filter = lambda record: self.env["oso"].authorize(
+    #             self.env.user, "read", record.sudo()
+    #         )
+    #         results = results.filtered(allow_filter)
+    #     return results
 
+    @authorize("read")
     def read(self, *args, **kwargs):
-        self.check_access_rights("read")
-        results = self._filter_authorized()
-        return super(OsoBase, results).read(*args, **kwargs)
+        return super().read(*args, **kwargs)
 
-    def _search(self, arg, *other_args, **kwargs):
-        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-            # Get all IDs and filter down to just the authorized ones
-            filtered_ids = self.browse(super(OsoBase, self)._search([]))._filter_authorized().ids
-            # add it as a search filter
-            arg += [("id", "in", filtered_ids)]
-        results = super()._search(arg, *other_args, **kwargs)
-        return results
+    @authorize("read")
+    def search(self, *args, **kwargs):
+        return super().search(*args, **kwargs)
+
+    # def read(self, *args, **kwargs):
+    #     self.check_access_rights("read")
+    #     results = self._filter_authorized()
+    #     return super(OsoBase, results).read(*args, **kwargs)
+
+    # def _search(self, arg, *other_args, **kwargs):
+    #     if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+    #         # Get all IDs and filter down to just the authorized ones
+    #         filtered_ids = self.browse(super(OsoBase, self)._search([]))._filter_authorized().ids
+    #         # add it as a search filter
+    #         arg += [("id", "in", filtered_ids)]
+    #     results = super()._search(arg, *other_args, **kwargs)
+    #     return results
