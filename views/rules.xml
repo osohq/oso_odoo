@@ -1,6 +1,0 @@
-<!-- <record id="oso_read_filter" model="ir.rule">
-    <field name="name">Filter by oso read permissions</field>
-    <field name="model_id" ref="base"/>
-    <field eval="True" name="global"/>
-    <field name="domain_force"> [('oso_perm_read','=',True)]</field>
-</record> -->
