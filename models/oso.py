@@ -82,7 +82,16 @@ class Oso(models.AbstractModel):
         return self.oso.is_allowed(user, action, resource)
 
 
+class OsoUser(models.AbstractModel):
+    _inherit = "res.users"
+
+    def _group_names(self):
+        """Get all user groups as a list of XML string names"""
+        return list(self.groups_id.get_xml_id().values())
+
+
 class IrModelAccess(models.Model):
+    _name = "oso.ir.model.access"
     _inherit = "ir.model.access"
 
     def _check_model_access_by_name(self, operation, model_name):
@@ -198,7 +207,9 @@ class OsoBase(models.AbstractModel):
         """Verifies that the model-level operation is allowed for
         the current user according to the current oso policy.
         """
-        return self.env["ir.model.access"].check(self._name, operation, raise_exception)
+        return self.env["oso.ir.model.access"].check(
+            self._name, operation, raise_exception
+        )
 
     def check_access_rule(self, operation):
         """If access control with oso is enabled for the model,
@@ -233,10 +244,6 @@ class OsoBase(models.AbstractModel):
     def _filter_authorized(self):
         results = self
         if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-            if not results.ids:
-                import pdb
-
-                pdb.set_trace()
             _logger.info(f"Authorizing read on {results}")
             allow_filter = lambda record: self.env["oso"].authorize(
                 self.env.user, "read", record.sudo()
@@ -249,10 +256,16 @@ class OsoBase(models.AbstractModel):
         results = self._filter_authorized()
         return super(OsoBase, results).read(*args, **kwargs)
 
-    def _search(self, arg, *other_args, **kwargs):
-        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+    def _search(self, arg, *other_args, access_rights_uid=None, **kwargs):
+        if (
+            access_rights_uid != 1
+            and not self.env.su
+            and self.env["oso.model.access"].is_checked(self._name)
+        ):
             # Get all IDs and filter down to just the authorized ones
-            filtered_ids = self.browse(super(OsoBase, self)._search([]))._filter_authorized().ids
+            filtered_ids = (
+                self.browse(super(OsoBase, self)._search(arg))._filter_authorized().ids
+            )
             # add it as a search filter
             arg += [("id", "in", filtered_ids)]
         results = super()._search(arg, *other_args, **kwargs)

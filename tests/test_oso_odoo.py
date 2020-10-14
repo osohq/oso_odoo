@@ -4,10 +4,11 @@ from odoo.tests import tagged
 from odoo.exceptions import AccessError
 from odoo.modules.module import get_resource_path
 
-from ..models.oso import OsoTestModel
+from ..models.test import OsoTestModel
 
 from pathlib import Path
 
+from oso import Variable
 
 # Tags required so that classes are registered with oso before tests.
 @tagged("-at_install", "post_install")
@@ -32,3 +33,18 @@ class TestOso(TransactionCase):
 
         with self.assertRaises(AccessError):
             bad = self.env["oso.test.model"].create({"good": False})
+
+    def test_filter(self):
+        oso = self.env["oso"].oso
+
+        repo_model = self.env["oso.test.repository"]
+        repositories = repo_model.browse(repo_model._search([], access_rights_uid=1))
+        query = oso.query_rule(
+            "filter_allow",
+            self.env.ref("base.user_demo"),
+            "read",
+            list(repositories),
+            Variable("output"),
+        )
+
+        assert len(next(query)["bindings"]["output"]) == 2
