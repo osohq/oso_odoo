@@ -41,35 +41,3 @@
     <menuitem id="open_repo_view" name="Open Repository View" parent="main_menu" action="test_repo_view"/>
 
 </odoo>
-
-<!-- <odoo>
-    <record id="test_data" model="ir.actions.act_window">
-        <field name="name">Test Data</field>
-        <field name="res_model">oso.test.organization</field>
-        <field name="view_id" ref="test_org_view"/>
-    </record>
-    <menuitem name="Test Data" id="test_menu" action="test_data" parent=""/>
-
-    <record id="test_org_view" model="ir.ui.view">
-        <field name="name">Test data view</field>
-        <field name="model">oso.test.organization</field>
-        <field name="arch" type="xml">
-            <tree>
-                <field name="name"/>
-            </tree>
-        </field>
-    </record>
-
-    <record id="test_repo_view" model="ir.ui.view">
-        <field name="name">Test data view</field>
-        <field name="model">oso.test.repository</field>
-        <field name="arch" type="xml">
-            <tree>
-                <field name="name"/>
-                <field name="organization"/>
-            </tree>
-        </field>
-    </record>
-</odoo>
-
-     -->
