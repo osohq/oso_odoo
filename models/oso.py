@@ -13,7 +13,7 @@ from odoo.modules import get_modules, get_resource_path
 
 import polar
 from polar import Polar
-from oso import Oso, OsoError
+from oso import Oso, OsoError, Variable
 
 
 _logger = getLogger(__name__)
@@ -52,33 +52,18 @@ class Oso(models.AbstractModel):
                         load_file(Path(root) / f)
 
     def reload_policies(self):
-        # TODO: replace with clear_rules once stabilised
         _logger.info("Reloading policies")
-        polar = Polar()
-        classes = {
-            k: v
-            for k, v in self.oso.host.classes.items()
-            if k not in polar.host.classes
-        }
-        constructors = {
-            k: v
-            for k, v in self.oso.host.constructors.items()
-            if k not in polar.host.constructors
-        }
-
-        polar = Polar(
-            classes=classes,
-            constructors=constructors,
-        )
-        self.oso.host = polar.host
-        self.oso.ffi_polar = polar.ffi_polar
+        self.oso.clear_rules()
         self.env["ir.rule"].clear_caches()
         self.env["ir.model.access"].clear_caches()
         self.load_policies()
 
     def authorize(self, user, action, resource):
-        self.oso.register_constant("env", self.env)
-        self.oso.register_constant("context", dict(self._context))
+        self.oso.register_constant(
+            self.env,
+            "env",
+        )
+        self.oso.register_constant(dict(self._context), "context")
         return self.oso.is_allowed(user, action, resource)
 
 
@@ -144,63 +129,9 @@ class OsoModelAccess(models.Model):
         return bool(self._cr.rowcount)
 
 
-# Decorator used to wrap base models
-# def authorize(action):
-#     def wrap(function):
-#         @wraps(function)
-#         def wrapper(self, *args, **kwargs):
-#             self.check_access_rights("read")
-#             results = self
-#             results = function(results, *args, **kwargs)
-#             if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-#                 if not results.ids:
-#                     import pdb
-
-#                     pdb.set_trace()
-#                 _logger.info(f"Authorizing {action} on {results}")
-#                 allow_filter = lambda record: self.env["oso"].authorize(
-#                     self.env.user, action, record.sudo()
-#                 )
-#                 results = results.filtered(allow_filter)
-#             # else:
-#             # _logger.debug(f"Skipping authorization for {self._name}")
-
-#             return results
-
-#         return wrapper
-
-#     return wrap
-
-
 class OsoBase(models.AbstractModel):
     _inherit = "base"
     _description = "model- and record-level access control with oso"
-
-    # oso_perm_read = fields.Boolean(
-    #     "oso read permission",
-    #     default=True,
-    #     compute="_compute_read_perm",
-    #     readonly=True,
-    #     search="_search_read_perm",
-    # )
-
-    # @api.model
-    # def _search_read_perm(self, operator, value):
-    #     recs = self.search([]).filtered(lambda x: x.oso_perm_read is True)
-    #     if recs:
-    #         return [("id", "in", [x.id for x in recs])]
-
-    # @api.model
-    # @api.depends_context("uid", "oso")
-    # def _compute_read_perm(self):
-    #     if self.env["oso.model.access"].is_checked(self._name):
-    #         for record in self:
-    #             try:
-    #                 record.oso_perm_read = self.env["oso"].authorize(
-    #                     self.env.user, "read", record
-    #                 )
-    #             except Exception:
-    #                 pass
 
     @api.model
     def check_access_rights(self, operation, raise_exception=True):
@@ -249,6 +180,22 @@ class OsoBase(models.AbstractModel):
                 self.env.user, "read", record.sudo()
             )
             results = results.filtered(allow_filter)
+        return results
+
+    def _filter_authorized_in_polar(self):
+        """Not currently used: experiment to perform filtering in Polar"""
+        results = self
+        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+            _logger.info(f"Authorizing read on {results}")
+            query = self.env["oso"].oso.query_rule(
+                "filter_allow",
+                self.env.user,
+                "read",
+                list(results),
+                Variable("output"),
+            )
+            query_results = next(query)["bindings"]["output"]
+            results = sum(query_results, self.browse())
         return results
 
     def read(self, *args, **kwargs):
