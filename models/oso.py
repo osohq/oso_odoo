@@ -27,8 +27,6 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.load_policies()
-
     def load_policies(self):
         """Walks all modules and loads and .polar policy files found"""
 
@@ -38,8 +36,10 @@ class Oso(models.AbstractModel):
                     _logger.debug(f"Loading policy file: {file}")
                     self.oso.load_file(file)
                 except polar.exceptions.FileLoadingError as e:
-                    _logger.exception(e)
+                    _logger.debug(e)
                     pass
+            else:
+                _logger.warning(f"Not a valid policy file: {file}")
 
         _logger.debug(f"Got modules: {get_modules()}")
         for module in get_modules():
@@ -51,39 +51,45 @@ class Oso(models.AbstractModel):
                         _logger.debug(f"Load file: {Path(root) / f}")
                         load_file(Path(root) / f)
 
-    def reload_policies(self):
-        # TODO: replace with clear_rules once stabilised
-        _logger.info("Reloading policies")
-        polar = Polar()
-        classes = {
-            k: v
-            for k, v in self.oso.host.classes.items()
-            if k not in polar.host.classes
-        }
-        constructors = {
-            k: v
-            for k, v in self.oso.host.constructors.items()
-            if k not in polar.host.constructors
-        }
+        for policy in self.env["oso.policy"].search([]):
+            (module, *segments) = policy.path.split("/")
+            path = Path(get_resource_path(module, *segments))
+            _logger.info(f"Load custom policy: {path}")
+            load_file(path)
 
-        polar = Polar(
-            classes=classes,
-            constructors=constructors,
-        )
-        self.oso.host = polar.host
-        self.oso.ffi_polar = polar.ffi_polar
-        self.env['ir.rule'].clear_caches()
-        self.env['ir.model.access'].clear_caches()
+    def _register_hook(self):
+        self.reload_policies()
+        super()._register_hook()
+
+    def reload_policies(self):
+        _logger.info("Reloading policies")
+        self.oso.clear_rules()
+        self.env["ir.rule"].clear_caches()
+        self.env["ir.model.access"].call_cache_clearing_methods()
+        self.env["ir.model.access"].clear_caches()
         self.load_policies()
 
     def authorize(self, user, action, resource):
-        self.oso.register_constant("env", self.env)
-        self.oso.register_constant("context", dict(self.env.context))
+        self.oso.register_constant(
+            self.env,
+            "env",
+        )
+        self.oso.register_constant(dict(self._context), "context")
         return self.oso.is_allowed(user, action, resource)
 
 
+class OsoUser(models.AbstractModel):
+    _inherit = "res.users"
+
+    def _group_names(self):
+        """Get all user groups as a list of XML string names"""
+        return list(self.groups_id.get_xml_id().values())
+
+
 class IrModelAccess(models.Model):
+    _name = "ir.model.access"
     _inherit = "ir.model.access"
+    _description = "oso replacement for ir.model.access"
 
     def _check_model_access_by_name(self, operation, model_name):
         # Check for Odoo bypass rule
@@ -135,28 +141,11 @@ class OsoModelAccess(models.Model):
         return bool(self._cr.rowcount)
 
 
-# Decorator used to wrap base models
-def authorize(action):
-    def wrap(function):
-        @wraps(function)
-        def wrapper(self, *args, **kwargs):
-            self.check_access_rights("read")
-            results = self
-            if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-                _logger.debug(f"Authorizing {action} on {results}")
-                allow_filter = lambda record: self.env["oso"].authorize(self.env.user, action, record.sudo()
-                )
-                results = results.filtered(allow_filter)
-            # else:
-            # _logger.debug(f"Skipping authorization for {self._name}")
+class OsoPolicy(models.Model):
+    _name = "oso.policy"
+    _description = "add additional custom policies"
 
-            results = function(results, *args, **kwargs)
-
-            return results
-
-        return wrapper
-
-    return wrap
+    path = fields.Char(string="Path")
 
 
 class OsoBase(models.AbstractModel):
@@ -194,20 +183,38 @@ class OsoBase(models.AbstractModel):
         # Rewrite model name for Polar compatibility.
         name = self._name.replace(".", "::")
         oso = self.env["oso"].oso
-        oso.register_class(type(self), name=name)
-        _logger.debug(f"registered class {name}")
+        try:
+            oso.register_class(type(self), name=name)
+            _logger.debug(f"registered class {name}")
+        except polar.exceptions.DuplicateClassAliasError as e:
+            _logger.debug(f"class {name} already registered")
 
-    @authorize("read")
+    def _filter_authorized(self):
+        results = self
+        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
+            _logger.info(f"Authorizing read on {results}")
+            allow_filter = lambda record: self.env["oso"].authorize(
+                self.env.user, "read", record.sudo()
+            )
+            results = results.filtered(allow_filter)
+        return results
+
     def read(self, *args, **kwargs):
-        return super().read(*args, **kwargs)
+        self.check_access_rights("read")
+        results = self._filter_authorized()
+        return super(OsoBase, results).read(*args, **kwargs)
 
-    @authorize("read")
-    def search(self, *args, **kwargs):
-        return super().search(*args, **kwargs)
-
-
-class OsoTestModel(models.Model):
-    _name = "oso.test.model"
-    _description = "Model for testing oso"
-
-    good = fields.Boolean()
+    def _search(self, arg, *other_args, access_rights_uid=None, **kwargs):
+        if (
+            access_rights_uid != 1
+            and not self.env.su
+            and self.env["oso.model.access"].is_checked(self._name)
+        ):
+            # Get all IDs and filter down to just the authorized ones
+            filtered_ids = (
+                self.browse(super(OsoBase, self)._search(arg))._filter_authorized().ids
+            )
+            # add it as a search filter
+            arg += [("id", "in", filtered_ids)]
+        results = super()._search(arg, *other_args, **kwargs)
+        return results

@@ -11,6 +11,14 @@
     "data": [
         "views/actions.xml",
         "security/ir.model.access.csv",
-        "security/oso.model.access.csv",
     ],
+    "demo": [
+        "demo/oso.policy.csv",
+        "demo/oso.test.model.csv",
+        "demo/oso.test.organization.csv",
+        "demo/oso.test.repository.csv",
+        "demo/oso.model.access.csv",
+        "views/demo_views.xml",
+    ],
+    "auto_install": True,
 }
