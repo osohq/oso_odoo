@@ -13,7 +13,7 @@ from odoo.modules import get_modules, get_resource_path
 
 import polar
 from polar import Polar
-from oso import Oso, OsoError, Variable
+from oso import Oso, OsoError
 
 
 _logger = getLogger(__name__)
@@ -27,8 +27,6 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.load_policies()
-
     def load_policies(self):
         """Walks all modules and loads and .polar policy files found"""
 
@@ -40,6 +38,8 @@ class Oso(models.AbstractModel):
                 except polar.exceptions.FileLoadingError as e:
                     _logger.debug(e)
                     pass
+            else:
+                _logger.warning(f"Not a valid policy file: {file}")
 
         _logger.debug(f"Got modules: {get_modules()}")
         for module in get_modules():
@@ -51,10 +51,21 @@ class Oso(models.AbstractModel):
                         _logger.debug(f"Load file: {Path(root) / f}")
                         load_file(Path(root) / f)
 
+        for policy in self.env["oso.policy"].search([]):
+            (module, *segments) = policy.path.split("/")
+            path = Path(get_resource_path(module, *segments))
+            _logger.info(f"Load custom policy: {path}")
+            load_file(path)
+
+    def _register_hook(self):
+        self.reload_policies()
+        super()._register_hook()
+
     def reload_policies(self):
         _logger.info("Reloading policies")
         self.oso.clear_rules()
         self.env["ir.rule"].clear_caches()
+        self.env["ir.model.access"].call_cache_clearing_methods()
         self.env["ir.model.access"].clear_caches()
         self.load_policies()
 
@@ -76,8 +87,9 @@ class OsoUser(models.AbstractModel):
 
 
 class IrModelAccess(models.Model):
-    _name = "oso.ir.model.access"
+    _name = "ir.model.access"
     _inherit = "ir.model.access"
+    _description = "oso replacement for ir.model.access"
 
     def _check_model_access_by_name(self, operation, model_name):
         # Check for Odoo bypass rule
@@ -129,6 +141,13 @@ class OsoModelAccess(models.Model):
         return bool(self._cr.rowcount)
 
 
+class OsoPolicy(models.Model):
+    _name = "oso.policy"
+    _description = "add additional custom policies"
+
+    path = fields.Char(string="Path")
+
+
 class OsoBase(models.AbstractModel):
     _inherit = "base"
     _description = "model- and record-level access control with oso"
@@ -138,9 +157,7 @@ class OsoBase(models.AbstractModel):
         """Verifies that the model-level operation is allowed for
         the current user according to the current oso policy.
         """
-        return self.env["oso.ir.model.access"].check(
-            self._name, operation, raise_exception
-        )
+        return self.env["ir.model.access"].check(self._name, operation, raise_exception)
 
     def check_access_rule(self, operation):
         """If access control with oso is enabled for the model,
@@ -180,22 +197,6 @@ class OsoBase(models.AbstractModel):
                 self.env.user, "read", record.sudo()
             )
             results = results.filtered(allow_filter)
-        return results
-
-    def _filter_authorized_in_polar(self):
-        """Not currently used: experiment to perform filtering in Polar"""
-        results = self
-        if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
-            _logger.info(f"Authorizing read on {results}")
-            query = self.env["oso"].oso.query_rule(
-                "filter_allow",
-                self.env.user,
-                "read",
-                list(results),
-                Variable("output"),
-            )
-            query_results = next(query)["bindings"]["output"]
-            results = sum(query_results, self.browse())
         return results
 
     def read(self, *args, **kwargs):
