@@ -5,9 +5,8 @@ from os.path import isfile
 from pathlib import Path
 
 
-from odoo import fields, models, api, tools
+from odoo import fields, models
 from odoo.exceptions import AccessError
-from odoo.modules import get_modules, get_resource_path
 
 
 class OsoTestModel(models.Model):

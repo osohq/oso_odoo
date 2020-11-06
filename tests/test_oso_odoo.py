@@ -1,8 +1,6 @@
-from odoo import models
 from odoo.tests.common import TransactionCase
 from odoo.tests import tagged
 from odoo.exceptions import AccessError
-from odoo.modules.module import get_resource_path
 
 from ..models.test import OsoTestModel
 
@@ -15,6 +13,7 @@ from oso import Variable
 class TestOso(TransactionCase):
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
+
         self.env["oso"].reload_policies()
         user_demo = self.env.ref("base.user_demo")
         self.env = self.env(user=user_demo)
