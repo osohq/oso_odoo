@@ -17,14 +17,9 @@ from polar import Polar
 from polar.exceptions import DuplicateClassAliasError, FileLoadingError
 from polar.partial import Partial, TypeConstraint
 
-from .partial import partial_to_domain_expr
+from .partial import partial_to_domain_expr, polar_type_name
 
 _logger = getLogger(__name__)
-
-
-def polar_type_name(name):
-    """Translate an Odoo model name to a Polar type specializer name."""
-    return name.replace(".", "::")
 
 
 class Oso(models.AbstractModel):
@@ -95,7 +90,7 @@ class Oso(models.AbstractModel):
             domain = []
             for result in results:
                 resource_partial = result["bindings"]["resource"]
-                expr = partial_to_domain_expr(resource_partial, type_name)
+                expr = partial_to_domain_expr(resource_partial, resource)
                 if domain:
                     domain = domain_expression.OR([domain, expr])
                 else:

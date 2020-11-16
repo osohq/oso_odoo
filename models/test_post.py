@@ -26,11 +26,12 @@ class Post(models.Model):
     tags = fields.Many2many("oso.test_post.tag")
 
 
-# class User(models.Model):
-#     _inherit = "res.users"
+class User(models.Model):
+    _inherit = "res.users"
 
-#     is_moderator = fields.Boolean(default=False)
-#     is_banned = fields.Boolean(default=False)
+    is_moderator = fields.Boolean(default=False)
+    is_banned = fields.Boolean(default=False)
+
 
 # Q(ap): What are these for?
 # Single tag

@@ -1,31 +1,41 @@
 """Translate Polar expressions to Odoo domain expressions.
 Used in the context of partially evaluated queries."""
 
+import functools
+from typing import Any, Callable, List
+
 from odoo.models import AbstractModel
 from odoo.osv import expression as domain_expression
 
 from polar import Expression, Variable
 from polar.exceptions import UnsupportedError
 
+EmitFunction = Callable[[str], Any]
 
-def partial_to_domain_expr(expr: Expression, type_name: str):
+
+def polar_type_name(name):
+    """Translate an Odoo model name to a Polar type specializer name."""
+    return name.replace(".", "::")
+
+
+def partial_to_domain_expr(expr: Expression, model):
     """Translate a Polar expression to an Odoo domain expression."""
     assert isinstance(expr, Expression), "expected a Polar expression"
     if expr.operator in ("Eq", "Unify"):
-        return compare_expr(expr, type_name)
+        return compare_expr(expr, model)
     elif expr.operator == "And":
-        return and_expr(expr, type_name)
+        return and_expr(expr, model)
     elif expr.operator == "Isa":
-        assert expr.args[1].tag == type_name
+        assert expr.args[1].tag == polar_type_name(model._name)
         return []
     else:
         raise UnsupportedError(f"Unsupported expression {expr}")
 
 
-def and_expr(expr: Expression, type_name: str):
+def and_expr(expr: Expression, model):
     assert expr.operator == "And"
     return domain_expression.AND(
-        [partial_to_domain_expr(arg, type_name) for arg in expr.args]
+        [partial_to_domain_expr(arg, model) for arg in expr.args]
     )
 
 
@@ -40,26 +50,39 @@ COMPARISONS = {
 }
 
 
-def compare_expr(expr: Expression, type_name: str):
+def compare_expr(expr: Expression, model):
     op = expr.operator
     (left, right) = expr.args
-    field = dot_op_field(left)
-    if field:
+    path = dot_op_path(left)
+    if path:
         if isinstance(right, AbstractModel):
             assert len(right) == 1
             right = right.id
-        return COMPARISONS[op](field, right)
+        return COMPARISONS[op](".".join(path), right)
     else:
-        assert False, "When does this happen?"
-        return COMPARISONS[op](left, right)
+        path = dot_op_path(right)
+        assert path
+        assert False, "Is this case ever hit?"
+        return COMPARISONS[op](left, ".".join(path))
 
 
-def dot_op_field(expr):
-    """Get the field from dot op ``expr`` or return ``False``."""
-    return (
-        isinstance(expr, Expression)
-        and expr.operator == "Dot"
-        and isinstance(expr.args[0], Variable)
-        and expr.args[0] == Variable("_this")
-        and expr.args[1]
-    )
+# TODO (dhatch): Move this helper into base.
+def dot_op_path(expr):
+    """Get the path components of a lookup.
+
+    The path is returned as a list.
+
+    _this.created_by => ['created_by']
+    _this.created_by.username => ['created_by', 'username']
+
+    None is returned if input is not a dot operation.
+    """
+    if not (isinstance(expr, Expression) and expr.operator == "Dot"):
+        return None
+
+    assert len(expr.args) == 2
+
+    if expr.args[0] == Variable("_this"):
+        return [expr.args[1]]
+
+    return dot_op_path(expr.args[0]) + [expr.args[1]]
