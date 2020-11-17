@@ -10,95 +10,75 @@ from odoo.exceptions import AccessError
 
 from ..models.test import OsoTestModel
 
-partner = None
-
-
-# Every user must have an associated partner.
-def make_partner(env):
-    global partner
-    if partner is None:
-        partner = env["res.partner"].create({"name": "Post test"})
-    return partner
-
-
-def make_user(env, login, **kwargs):
-    return env["res.users"].create(
-        {"login": login, "partner_id": make_partner(env).id, **kwargs}
-    )
-
-
-def make_post(env, contents, access_level, created_by, **kwargs):
-    return env["oso.test_post.post"].create(
-        {
-            "contents": contents,
-            "access_level": access_level,
-            "created_by": created_by.id,
-            **kwargs,
-        }
-    )
-
 
 # Tags required so that classes are registered with oso before tests.
 @tagged("-at_install", "post_install")
 class TestOso(TransactionCase):
+    def make_user(self, login, **kwargs):
+        partner = self.env["res.partner"].create({"name": "Post test"})
+        return self.env["res.users"].create(
+            {"login": login, "partner_id": partner.id, **kwargs}
+        )
+
+    def make_post(self, contents, access_level, created_by, **kwargs):
+        return self.env["oso.test_post.post"].create(
+            {
+                "contents": contents,
+                "access_level": access_level,
+                "created_by": created_by.id,
+                **kwargs,
+            }
+        )
+
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
 
-        make_user(self.env, "foo")
-
-        foo = make_user(self.env, "foo")
-        admin_user = make_user(self.env, "admin_user", is_moderator=True)
-        bad_user = make_user(self.env, "bad_user", is_banned=True)
+        foo = self.make_user("foo")
+        admin_user = self.make_user("admin_user", is_moderator=True)
+        bad_user = self.make_user("bad_user", is_banned=True)
 
         self.posts = [
-            make_post(self.env, "foo public post", "public", foo),
-            make_post(
-                self.env,
+            self.make_post("foo public post", "public", foo),
+            self.make_post(
                 "foo public post 2",
                 "public",
                 foo,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "foo private post",
                 "private",
                 foo,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "foo private post 2",
                 "private",
                 foo,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "private for moderation",
                 "private",
                 foo,
                 needs_moderation=True,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "public for moderation",
                 "public",
                 foo,
                 needs_moderation=True,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "admin post",
                 "public",
                 admin_user,
                 needs_moderation=True,
             ),
-            make_post(
-                self.env,
+            self.make_post(
                 "admin post",
                 "private",
                 admin_user,
                 needs_moderation=True,
             ),
-            make_post(self.env, "banned post", "public", bad_user),
+            self.make_post("banned post", "public", bad_user),
         ]
 
         # Tests will load their own rules.
@@ -236,11 +216,11 @@ class TestOso(TransactionCase):
         self.assertEqual(len(posts), 6)
         self.assertTrue([allowed(post, admin) or allowed_admin(post) for post in posts])
 
-    def tag_test_fixture(self):
+    def nottest_in_multiple_attribute_relationship(self):
         """Test data for tests with tags."""
-        user = make_user(self.env, "user")
-        other_user = make_user(self.env, "other_user")
-        moderator = make_user(self.env, "moderator", is_moderator=True)
+        user = self.make_user("user")
+        other_user = self.make_user("other_user")
+        moderator = self.make_user("moderator", is_moderator=True)
 
         Tag = self.env["oso.test_post.tag"]
 
@@ -250,47 +230,35 @@ class TestOso(TransactionCase):
         eng = make_tag("eng")
         random = make_tag("random", True)
 
-        user_public_post = Post(
-            contents="public post", created_by=user, access_level="public"
-        )
-        user_private_post = Post(
-            contents="private user post", created_by=user, access_level="private"
-        )
+        self.make_post("public post", "public", user)
+        self.make_post("private user post", "private", user)
 
-        other_user_public_post = Post(
-            contents="other user public", created_by=other_user, access_level="public"
-        )
-        other_user_private_post = Post(
-            contents="other user private", created_by=other_user, access_level="private"
-        )
-        other_user_random_post = Post(
-            contents="other user random",
-            created_by=other_user,
-            access_level="private",
-            tags=[random],
+        self.make_post("other user public", "public", other_user)
+        self.make_post("other user private", "private", other_user)
+        self.make_post(
+            "other user random",
+            "private",
+            other_user,
+            tags=[random.id],
         )
 
-        # HACK!
-        objects = {}
-        for (name, local) in locals().items():
-            if name != "session" and name != "objects":
-                session.add(local)
+        self.env["oso"].oso.load_str(
+            """
+            allow(_user, "read", post: oso::test_post::post) if
+                post.access_level = "public";
+            allow(_user, "read", post: oso::test_post::post) if
+                post.access_level = "private" and
+                post.created_by = user;
+            allow(_user, "read", post: oso::test_post::post) if
+                tag in post.tags and
+                tag.is_public = true;
+            """
+        )
 
-            objects[name] = local
-
-        session.commit()
-
-        return objects
+        posts = self.env["oso.test_post.post"].with_user(user).search([])
+        breakpoint()
 
 
-# def test_in_multiple_attribute_relationship(session, oso, tag_test_fixture):
-#     oso.load_str("""
-#         allow(user, "read", post: Post) if post.access_level = "public";
-#         allow(user, "read", post: Post) if post.access_level = "private" and post.created_by = user;
-#         allow(user, "read", post: Post) if tag in post.tags and tag.is_public = true;
-#     """)
-
-#     posts = authorize_model(oso, tag_test_fixture['user'], "read", session, Post)
 #     print(str(posts.statement.compile()))
 #     assert tag_test_fixture['user_public_post'] in posts
 #     assert tag_test_fixture['user_private_post'] in posts
