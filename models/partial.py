@@ -12,42 +12,6 @@ from polar.exceptions import UnsupportedError
 
 EmitFunction = Callable[[str], Any]
 
-
-def polar_type_name(name):
-    """Translate an Odoo model name to a Polar type specializer name."""
-    return name.replace(".", "::")
-
-
-def partial_to_domain_expr(expr: Expression, model: AbstractModel):
-    """Translate a Polar expression to an Odoo domain expression."""
-    assert isinstance(expr, Expression), "expected a Polar expression"
-    assert isinstance(model, AbstractModel), "expected a model"
-
-    if expr.operator in ("Eq", "Unify"):
-        return compare_expr(expr, model)
-    elif expr.operator == "And":
-        return and_expr(expr, model)
-    elif expr.operator == "Isa":
-        assert expr.args[1].tag == polar_type_name(model._name)
-        return None
-    elif expr.operator == "In":
-        return in_expr(expr, model)
-    else:
-        raise UnsupportedError(f"Unsupported expression {expr}")
-
-
-def and_expr(expr: Expression, model):
-    assert expr.operator == "And"
-    operands = []
-    for arg in expr.args:
-        domain_expr = partial_to_domain_expr(arg, model)
-        if domain_expr is None:
-            continue
-        operands.append(domain_expr)
-
-    return domain_expression.AND(operands)
-
-
 COMPARISONS = {
     "Unify": lambda f, v: [(f, "=", v)],
     "Eq": lambda f, v: [(f, "=", v)],
@@ -56,47 +20,80 @@ COMPARISONS = {
     "Gt": lambda f, v: [(f, ">", v)],
     "Leq": lambda f, v: [(f, "<=", v)],
     "Lt": lambda f, v: [(f, "<", v)],
-    "In": lambda f, v: [(f, "in", v)],
 }
 
 
-def compare_expr(expr: Expression, model):
+def polar_type_name(name):
+    """Translate an Odoo model name to a Polar type specializer name."""
+    return name.replace(".", "::")
+
+
+def partial_to_domain_expr(expr: Expression, model: AbstractModel, **kwargs):
+    """Translate a Polar expression to an Odoo domain expression."""
+    assert isinstance(expr, Expression), "expected a Polar expression"
+    assert isinstance(model, AbstractModel), "expected a model"
+
+    if expr.operator in COMPARISONS:
+        return compare_expr(expr, model, **kwargs)
+    elif expr.operator == "And":
+        return and_expr(expr, model)
+    elif expr.operator == "Isa":
+        assert expr.args[1].tag == polar_type_name(model._name)
+        return None
+    elif expr.operator == "In":
+        return in_expr(expr, model, **kwargs)
+    else:
+        raise UnsupportedError(f"Unsupported expression {expr}")
+
+
+def and_expr(expr: Expression, model, **kwargs):
+    assert expr.operator == "And"
+    operands = []
+    for arg in expr.args:
+        domain_expr = partial_to_domain_expr(arg, model, **kwargs)
+        if domain_expr is None:
+            continue
+        operands.append(domain_expr)
+
+    return domain_expression.AND(operands)
+
+
+def compare_expr(expr: Expression, model, path=[], **kwargs):
     op = expr.operator
     (left, right) = expr.args
-    path = dot_op_path(left)
-    if path:
+    left_path = dot_op_path(left)
+    if left_path:
         if isinstance(right, AbstractModel):
             assert len(right) == 1
             right = right.id
-        return COMPARISONS[op](".".join(path), right)
+        return COMPARISONS[op](".".join(path + left_path), right)
     else:
-        path = dot_op_path(right)
-        assert path
-        assert False, "Is this case ever hit?"
-        return COMPARISONS[op](left, ".".join(path))
+        # TODO: Is this unreachable if everything is working correctly?
+        breakpoint()
 
 
 def in_expr(expr: Expression, model):
     print(f"expr: {expr}, model: {model}")
     assert expr.operator == "In"
-    left = expr.args[0]
-    right_path = dot_op_path(expr.args[1])
-    assert right_path
+    (left, right) = expr.args
+
+    right_path = dot_op_path(right)
+    assert right_path, "Expected a lookup path"
 
     if isinstance(left, Expression):
         # Since the relationship lookup always has to be on the left (the
         # field), do we need to invert directional operators like > / >= / < /
         # <= ?
-
-        assert dot_op_path(left.args[1]) is None, "how?"
         left_path = dot_op_path(left.args[0])
-
         if left_path:
             return COMPARISONS[left.operator](
                 ".".join(right_path + left_path), left.args[1]
             )
+        elif left.operator == "And":
+            # Distribute the expression over the "In".
+            return and_expr(left, model, path=right_path)
         else:
-            assert False, "why?"
+            assert False, f"Unhandled expression {left}"
     else:
         pass
         # right contains left

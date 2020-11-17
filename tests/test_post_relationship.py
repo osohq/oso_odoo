@@ -30,6 +30,11 @@ class TestOso(TransactionCase):
             }
         )
 
+    def make_tag(self, name, is_public=False):
+        return self.env["oso.test_post.tag"].create(
+            {"name": name, "is_public": is_public}
+        )
+
     def setUp(self, *args, **kwargs):
         super().setUp(*args, **kwargs)
 
@@ -222,13 +227,9 @@ class TestOso(TransactionCase):
         other_user = self.make_user("other_user")
         moderator = self.make_user("moderator", is_moderator=True)
 
-        Tag = self.env["oso.test_post.tag"]
-
-        def make_tag(name, is_public=False):
-            return Tag.create({"name": name, "is_public": is_public})
-
-        eng = make_tag("eng")
-        random = make_tag("random", True)
+        eng = self.make_tag("eng")
+        foo = self.make_tag("foo")
+        random = self.make_tag("random", True)
 
         user_public_post = self.make_post("public post", "public", user)
         user_private_post = self.make_post("private user post", "private", user)
@@ -245,6 +246,12 @@ class TestOso(TransactionCase):
             other_user,
             tags=[random.id],
         )
+        other_user_foo_post = self.make_post(
+            "other user foo",
+            "public",
+            other_user,
+            tags=[foo.id],
+        )
 
         self.env["oso"].oso.load_str(
             """
@@ -258,7 +265,7 @@ class TestOso(TransactionCase):
                 post.created_by = user;
             allow(_user, "read", post: oso::test_post::post) if
                 tag in post.tags and
-                tag.is_public = true;
+                (tag.id > 0 and (tag.is_public = true or tag.name = "foo"));
             """
         )
 
@@ -269,6 +276,7 @@ class TestOso(TransactionCase):
         self.assertTrue(other_user_public_post in posts)
         self.assertFalse(other_user_private_post in posts)
         self.assertTrue(other_user_random_post in posts)
+        self.assertTrue(other_user_foo_post in posts)
 
 
 # @pytest.fixture
