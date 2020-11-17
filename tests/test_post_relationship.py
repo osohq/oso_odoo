@@ -265,7 +265,7 @@ class TestOso(TransactionCase):
                 post.created_by = user;
             allow(_user, "read", post: oso::test_post::post) if
                 tag in post.tags and
-                (tag.id > 0 and (tag.is_public = true or tag.name = "foo"));
+                (0 < tag.id and (tag.is_public = true or tag.name = "foo"));
             """
         )
 

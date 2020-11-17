@@ -69,25 +69,35 @@ def compare_expr(expr: Expression, model, path=[], **kwargs):
     op = expr.operator
     (left, right) = expr.args
     left_path = dot_op_path(left)
+
     if left_path:
         return COMPARISONS[op](".".join(path + left_path), right)
     else:
-        # TODO: Is this unreachable if everything is working correctly?
-        breakpoint()
+        # Odoo only allows dot lookups (traversing relationships) in the
+        # field_name, which is on the LHS of a search criterion.
+        # See: https://www.odoo.com/documentation/14.0/reference/orm.html#search-domains
+        right_path = dot_op_path(right)
+        assert right_path, "Expected a lookup path"
+
+        domain = COMPARISONS[op](".".join(path + right_path), left)
+
+        if op in ["Geq", "Gt", "Leq", "Lt"]:
+            domain.insert(0, "!")
+            domain = domain_expression.distribute_not(domain)
+
+        return domain
+
+    assert left_path, "Expected a lookup path"
 
 
 def in_expr(expr: Expression, model, path=[], **kwargs):
     print(f"expr: {expr}, model: {model}")
     assert expr.operator == "In"
     (left, right) = expr.args
-
     right_path = dot_op_path(right)
     assert right_path, "Expected a lookup path"
 
     if isinstance(left, Expression):
-        # Since the relationship lookup always has to be on the left (the
-        # field), do we need to invert directional operators like > / >= / < /
-        # <= ?
         left_path = dot_op_path(left.args[0])
         if left_path:
             return COMPARISONS[left.operator](
