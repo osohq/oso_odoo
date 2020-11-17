@@ -10,6 +10,7 @@ from polar.exceptions import UnsupportedError
 
 def make_comparison(op):
     def compare(left, right):
+        # Odoo likes to operate on record IDs instead of records.
         if isinstance(right, BaseModel):
             assert len(right) == 1
             right = right.id
@@ -53,64 +54,68 @@ def partial_to_domain_expr(expr: Expression, model: BaseModel, **kwargs):
         raise UnsupportedError(f"Unsupported expression {expr}")
 
 
-def and_expr(expr: Expression, model, **kwargs):
+def and_expr(expr: Expression, model: BaseModel, **kwargs):
     assert expr.operator == "And"
     operands = []
     for arg in expr.args:
         domain_expr = partial_to_domain_expr(arg, model, **kwargs)
-        if domain_expr is None:
-            continue
-        operands.append(domain_expr)
+        if domain_expr:
+            operands.append(domain_expr)
 
     return domain_expression.AND(operands)
 
 
-def compare_expr(expr: Expression, model, path=[], **kwargs):
+def compare_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
     op = expr.operator
     (left, right) = expr.args
     left_path = dot_op_path(left)
 
     if left_path:
+        # LHS of comparison is a dot lookup.
         return COMPARISONS[op](".".join(path + left_path), right)
     else:
+        # RHS of comparison is a dot lookup.
+        #
         # Odoo only allows dot lookups (traversing relationships) in the
-        # field_name, which is on the LHS of a search criterion.
+        # field_name, which is on the LHS of a search criterion. Therefore, we
+        # will swap the operands and invert the operator if it is asymmetric.
+        #
         # See: https://www.odoo.com/documentation/14.0/reference/orm.html#search-domains
         right_path = dot_op_path(right)
         assert right_path, "Expected a lookup path"
 
         domain = COMPARISONS[op](".".join(path + right_path), left)
-
         if op in ["Geq", "Gt", "Leq", "Lt"]:
             domain.insert(0, "!")
             domain = domain_expression.distribute_not(domain)
 
         return domain
 
-    assert left_path, "Expected a lookup path"
 
-
-def in_expr(expr: Expression, model, path=[], **kwargs):
+def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
     assert expr.operator == "In"
     (left, right) = expr.args
     right_path = dot_op_path(right)
-    assert right_path, "Expected a lookup path"
+    assert right_path, "RHS of in must be a dot lookup"
+    right_path = path + right_path
 
     if isinstance(left, Expression):
-        left_path = dot_op_path(left.args[0])
-        if left_path:
-            return COMPARISONS[left.operator](
-                ".".join(right_path + left_path), left.args[1]
-            )
-        elif left.operator == "And":
+        if left.operator == "And":
             # Distribute the expression over the "In".
             return and_expr(left, model, path=right_path)
         elif left.operator == "In":
+            # Nested in operations.
             return in_expr(left, model, path=right_path)
+        elif left.operator in COMPARISONS:
+            # `tag in post.tags and tag.created_by = user` where `post` is a
+            # partial and `user` is an Odoo record.
+            return compare_expr(left, model, path=right_path, **kwargs)
         else:
             assert False, f"Unhandled expression {left}"
     else:
-        return COMPARISONS["Unify"](".".join(path + right_path), left)
+        # `tag in post.tags and user in tag.users` where `post` is a partial
+        # and `user` is an Odoo record.
+        return COMPARISONS["Unify"](".".join(right_path), left)
 
 
 # TODO (dhatch): Move this helper into base.
