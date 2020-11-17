@@ -9,7 +9,7 @@ class Tag(models.Model):
     _name = "oso.test_post.tag"
 
     name = fields.Char()
-
+    created_by = fields.Many2one("res.users")
     # If provided, posts in this tag always have the public access level.
     is_public = fields.Boolean(default=False)
 

@@ -1,25 +1,32 @@
 """Translate Polar expressions to Odoo domain expressions.
 Used in the context of partially evaluated queries."""
 
-import functools
-from typing import Any, Callable, List
-
-from odoo.models import AbstractModel
+from odoo.models import BaseModel
 from odoo.osv import expression as domain_expression
 
 from polar import Expression, Variable
 from polar.exceptions import UnsupportedError
 
-EmitFunction = Callable[[str], Any]
+
+def make_comparison(op):
+    def compare(left, right):
+        if isinstance(right, BaseModel):
+            assert len(right) == 1
+            right = right.id
+
+        return [(left, op, right)]
+
+    return compare
+
 
 COMPARISONS = {
-    "Unify": lambda f, v: [(f, "=", v)],
-    "Eq": lambda f, v: [(f, "=", v)],
-    "Neq": lambda f, v: [(f, "!=", v)],
-    "Geq": lambda f, v: [(f, ">=", v)],
-    "Gt": lambda f, v: [(f, ">", v)],
-    "Leq": lambda f, v: [(f, "<=", v)],
-    "Lt": lambda f, v: [(f, "<", v)],
+    "Unify": make_comparison("="),
+    "Eq": make_comparison("="),
+    "Neq": make_comparison("!="),
+    "Geq": make_comparison(">="),
+    "Gt": make_comparison(">"),
+    "Leq": make_comparison("<="),
+    "Lt": make_comparison("<"),
 }
 
 
@@ -28,10 +35,10 @@ def polar_type_name(name):
     return name.replace(".", "::")
 
 
-def partial_to_domain_expr(expr: Expression, model: AbstractModel, **kwargs):
+def partial_to_domain_expr(expr: Expression, model: BaseModel, **kwargs):
     """Translate a Polar expression to an Odoo domain expression."""
     assert isinstance(expr, Expression), "expected a Polar expression"
-    assert isinstance(model, AbstractModel), "expected a model"
+    assert isinstance(model, BaseModel), "expected a model"
 
     if expr.operator in COMPARISONS:
         return compare_expr(expr, model, **kwargs)
@@ -63,9 +70,6 @@ def compare_expr(expr: Expression, model, path=[], **kwargs):
     (left, right) = expr.args
     left_path = dot_op_path(left)
     if left_path:
-        if isinstance(right, AbstractModel):
-            assert len(right) == 1
-            right = right.id
         return COMPARISONS[op](".".join(path + left_path), right)
     else:
         # TODO: Is this unreachable if everything is working correctly?
