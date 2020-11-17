@@ -91,7 +91,6 @@ def compare_expr(expr: Expression, model, path=[], **kwargs):
 
 
 def in_expr(expr: Expression, model, path=[], **kwargs):
-    print(f"expr: {expr}, model: {model}")
     assert expr.operator == "In"
     (left, right) = expr.args
     right_path = dot_op_path(right)

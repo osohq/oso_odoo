@@ -81,7 +81,9 @@ class Oso(models.AbstractModel):
 
         # TODO(ap): Should we handle model-level access using partials, too?
         if isinstance(resource, str):
-            return next(self.oso.query_rule("allow_model", user, action, resource), False)
+            return next(
+                self.oso.query_rule("allow_model", user, action, resource), False
+            )
         else:
             type_name = polar_type_name(resource._name)
             partial_resource = Partial("resource", TypeConstraint(type_name))
@@ -97,7 +99,6 @@ class Oso(models.AbstractModel):
                     domain = expr
             if domain == []:
                 domain = domain_expression.FALSE_DOMAIN
-            print(f"allow({user}, {action}, {partial_resource}) ⇒ {domain}")
             return domain
 
 
