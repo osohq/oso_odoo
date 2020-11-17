@@ -56,6 +56,7 @@ COMPARISONS = {
     "Gt": lambda f, v: [(f, ">", v)],
     "Leq": lambda f, v: [(f, "<=", v)],
     "Lt": lambda f, v: [(f, "<", v)],
+    "In": lambda f, v: [(f, "in", v)],
 }
 
 
@@ -76,8 +77,31 @@ def compare_expr(expr: Expression, model):
 
 
 def in_expr(expr: Expression, model):
-    # XXX
-    return []
+    print(f"expr: {expr}, model: {model}")
+    assert expr.operator == "In"
+    left = expr.args[0]
+    right_path = dot_op_path(expr.args[1])
+    assert right_path
+
+    if isinstance(left, Expression):
+        # Since the relationship lookup always has to be on the left (the
+        # field), do we need to invert directional operators like > / >= / < /
+        # <= ?
+
+        assert dot_op_path(left.args[1]) is None, "how?"
+        left_path = dot_op_path(left.args[0])
+
+        if left_path:
+            return COMPARISONS[left.operator](
+                ".".join(right_path + left_path), left.args[1]
+            )
+        else:
+            assert False, "why?"
+    else:
+        pass
+        # right contains left
+
+        # fetch right and then do COMPARISONS["In"](left, right)
 
 
 # TODO (dhatch): Move this helper into base.

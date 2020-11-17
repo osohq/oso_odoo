@@ -179,7 +179,7 @@ class TestOso(TransactionCase):
 
             # Object equals another object
             allow(actor: res::users, "read", post: oso::test_post::post) if
-                post.created_by.is_banned = false and 
+                post.created_by.is_banned = false and
                 post.created_by = actor and
                 post.access_level = "private";
 
@@ -216,7 +216,7 @@ class TestOso(TransactionCase):
         self.assertEqual(len(posts), 6)
         self.assertTrue([allowed(post, admin) or allowed_admin(post) for post in posts])
 
-    def nottest_in_multiple_attribute_relationship(self):
+    def test_in_multiple_attribute_relationship(self):
         """Test data for tests with tags."""
         user = self.make_user("user")
         other_user = self.make_user("other_user")
@@ -230,12 +230,16 @@ class TestOso(TransactionCase):
         eng = make_tag("eng")
         random = make_tag("random", True)
 
-        self.make_post("public post", "public", user)
-        self.make_post("private user post", "private", user)
+        user_public_post = self.make_post("public post", "public", user)
+        user_private_post = self.make_post("private user post", "private", user)
 
-        self.make_post("other user public", "public", other_user)
-        self.make_post("other user private", "private", other_user)
-        self.make_post(
+        other_user_public_post = self.make_post(
+            "other user public", "public", other_user
+        )
+        other_user_private_post = self.make_post(
+            "other user private", "private", other_user
+        )
+        other_user_random_post = self.make_post(
             "other user random",
             "private",
             other_user,
@@ -244,9 +248,12 @@ class TestOso(TransactionCase):
 
         self.env["oso"].oso.load_str(
             """
+            allow_model(_user, _action, "oso.test_post.post");
+            allow_model(_user, _action, "oso.test_post.tag");
+
             allow(_user, "read", post: oso::test_post::post) if
                 post.access_level = "public";
-            allow(_user, "read", post: oso::test_post::post) if
+            allow(user, "read", post: oso::test_post::post) if
                 post.access_level = "private" and
                 post.created_by = user;
             allow(_user, "read", post: oso::test_post::post) if
@@ -256,15 +263,13 @@ class TestOso(TransactionCase):
         )
 
         posts = self.env["oso.test_post.post"].with_user(user).search([])
-        breakpoint()
 
+        self.assertTrue(user_public_post in posts)
+        self.assertTrue(user_private_post in posts)
+        self.assertTrue(other_user_public_post in posts)
+        self.assertFalse(other_user_private_post in posts)
+        self.assertTrue(other_user_random_post in posts)
 
-#     print(str(posts.statement.compile()))
-#     assert tag_test_fixture['user_public_post'] in posts
-#     assert tag_test_fixture['user_private_post'] in posts
-#     assert tag_test_fixture['other_user_public_post'] in posts
-#     assert not tag_test_fixture['other_user_private_post'] in posts
-#     assert tag_test_fixture['other_user_random_post'] in posts
 
 # @pytest.fixture
 # def tag_nested_test_fixture(session):
