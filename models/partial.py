@@ -29,7 +29,7 @@ def partial_to_domain_expr(expr: Expression, model: AbstractModel):
         return and_expr(expr, model)
     elif expr.operator == "Isa":
         assert expr.args[1].tag == polar_type_name(model._name)
-        return []
+        return None
     elif expr.operator == "In":
         return in_expr(expr, model)
     else:
@@ -38,9 +38,14 @@ def partial_to_domain_expr(expr: Expression, model: AbstractModel):
 
 def and_expr(expr: Expression, model):
     assert expr.operator == "And"
-    return domain_expression.AND(
-        [partial_to_domain_expr(arg, model) for arg in expr.args]
-    )
+    operands = []
+    for arg in expr.args:
+        domain_expr = partial_to_domain_expr(arg, model)
+        if domain_expr is None:
+            continue
+        operands.append(domain_expr)
+
+    return domain_expression.AND(operands)
 
 
 COMPARISONS = {

@@ -95,7 +95,7 @@ class Oso(models.AbstractModel):
                     domain = domain_expression.OR([domain, expr])
                 else:
                     domain = expr
-            if not domain:
+            if domain == []:
                 domain = domain_expression.FALSE_DOMAIN
             print(f"allow({user}, {action}, {partial_resource}) ⇒ {domain}")
             return domain
