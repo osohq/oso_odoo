@@ -76,7 +76,7 @@ def compare_expr(expr: Expression, model, path=[], **kwargs):
         breakpoint()
 
 
-def in_expr(expr: Expression, model):
+def in_expr(expr: Expression, model, path=[], **kwargs):
     print(f"expr: {expr}, model: {model}")
     assert expr.operator == "In"
     (left, right) = expr.args
@@ -96,13 +96,12 @@ def in_expr(expr: Expression, model):
         elif left.operator == "And":
             # Distribute the expression over the "In".
             return and_expr(left, model, path=right_path)
+        elif left.operator == "In":
+            return in_expr(left, model, path=right_path)
         else:
             assert False, f"Unhandled expression {left}"
     else:
-        pass
-        # right contains left
-
-        # fetch right and then do COMPARISONS["In"](left, right)
+        return COMPARISONS["Unify"](".".join(path + right_path), left)
 
 
 # TODO (dhatch): Move this helper into base.

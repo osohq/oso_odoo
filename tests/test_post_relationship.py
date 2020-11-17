@@ -296,25 +296,21 @@ class TestOso(TransactionCase):
         random = self.make_tag("random", is_public=True, created_by=other_user.id)
 
         user_eng_post = self.make_post("user eng post", "public", user, tags=[eng.id])
-
         user_user_post = self.make_post(
-            "user eng post",
+            "user user post",
             "public",
             user,
             tags=[user_posts.id],
         )
-
         random_post = self.make_post(
             "other random post",
             "public",
             other_user,
             tags=[random.id],
         )
-
         not_tagged_post = self.make_post("not tagged post", "public", user, tags=[])
-
         all_tagged_post = self.make_post(
-            "not tagged post",
+            "all tagged post",
             "public",
             user,
             tags=[eng.id, user_posts.id, random.id],
@@ -323,6 +319,7 @@ class TestOso(TransactionCase):
             """
             allow_model(_user, _action, "oso.test_post.post");
             allow_model(_user, _action, "oso.test_post.tag");
+
             allow(user: res::users, "read", post: oso::test_post::post) if
                 tag in post.tags and
                 tag.created_by = user;
@@ -343,86 +340,75 @@ class TestOso(TransactionCase):
         self.assertTrue(not_tagged_post not in posts)
         self.assertTrue(all_tagged_post in posts)
 
+    def test_nested_relationship_many_many(self):
+        """Test that nested relationships work.
 
-# @pytest.fixture
-# def tag_nested_many_many_test_fixture(session):
-#     eng = Tag(name="eng")
-#     user_posts = Tag(name="user_posts")
-#     random = Tag(name="random", is_public=True)
+        post - (many) -> tags - (many) -> User
 
-#     user = User(username='user', tags=[eng, user_posts])
-#     other_user = User(username='other_user', tags=[random])
-#     moderator = User(username='moderator', tags=[random, user_posts, eng])
+        A user can read a post with a tag if the tag's creator is the user.
+        """
 
+        user = self.make_user("user")
+        other_user = self.make_user("other_user")
+        moderator = self.make_user("moderator", is_moderator=False)
 
-#     user_eng_post = Post(contents="user eng post",
-#                          access_level="public",
-#                          created_by=user,
-#                          tags=[eng])
-#     user_user_post = Post(contents="user eng post",
-#                          access_level="public",
-#                          created_by=user,
-#                          tags=[user_posts])
+        eng = self.make_tag("eng", users=[user.id, moderator.id])
+        user_posts = self.make_tag("user_posts", users=[user.id, moderator.id])
+        random = self.make_tag(
+            "random", is_public=True, users=[other_user.id, moderator.id]
+        )
 
-#     random_post = Post(contents="other random post",
-#                        access_level="public",
-#                        created_by=other_user,
-#                        tags=[random])
+        user_eng_post = self.make_post("user eng post", "public", user, tags=[eng.id])
+        user_user_post = self.make_post(
+            "user user post",
+            "public",
+            user,
+            tags=[user_posts.id],
+        )
+        random_post = self.make_post(
+            "other random post",
+            "public",
+            other_user,
+            tags=[random.id],
+        )
+        not_tagged_post = self.make_post("not tagged post", "public", user, tags=[])
+        all_tagged_post = self.make_post(
+            "all tagged post",
+            "public",
+            user,
+            tags=[eng.id, user_posts.id, random.id],
+        )
 
-#     not_tagged_post = Post(contents="not tagged post",
-#                            access_level="public",
-#                            created_by=user,
-#                            tags=[])
+        # TODO This direction doesn't work, because tag in user.tags is a concrete object.
+        # allow(user, "read", post: Post) if tag in post.tags and tag in user.tags;
+        self.env["oso"].oso.load_str(
+            """
+            allow_model(_user, _action, "oso.test_post.post");
+            allow_model(_user, _action, "oso.test_post.tag");
 
-#     all_tagged_post = Post(contents="not tagged post",
-#                            access_level="public",
-#                            created_by=user,
-#                            tags=[eng, user_posts, random])
+            allow(user: res::users, "read", post: oso::test_post::post) if
+                tag in post.tags and
+                user in tag.users;
+        """
+        )
 
-#     # HACK!
-#     objects = {}
-#     for (name, local) in locals().items():
-#         if name != "session" and name != "objects":
-#             session.add(local)
+        posts = self.env["oso.test_post.post"].with_user(user).search([])
+        self.assertTrue(user_eng_post in posts)
+        self.assertTrue(user_user_post in posts)
+        self.assertTrue(random_post not in posts)
+        self.assertTrue(not_tagged_post not in posts)
+        self.assertTrue(all_tagged_post in posts)
 
-#         objects[name] = local
+        posts = self.env["oso.test_post.post"].with_user(other_user).search([])
+        self.assertTrue(user_eng_post not in posts)
+        self.assertTrue(user_user_post not in posts)
+        self.assertTrue(random_post in posts)
+        self.assertTrue(not_tagged_post not in posts)
+        self.assertTrue(all_tagged_post in posts)
 
-#     session.commit()
-
-#     return objects
-
-# def test_nested_relationship_many_many(session, oso, tag_nested_many_many_test_fixture):
-#     """Test that nested relationships work.
-
-#     post - (many) -> tags - (many) -> User
-
-#     A user can read a post with a tag if the tag's creator is the user.
-#     """
-#     # TODO This direction doesn't work, because tag in user.tags is a concrete object.
-#     # allow(user, "read", post: Post) if tag in post.tags and tag in user.tags;
-#     oso.load_str("""
-#     allow(user, "read", post: Post) if tag in post.tags and user in tag.users;
-#     """)
-
-#     posts = authorize_model(oso, tag_nested_many_many_test_fixture['user'], "read", session, Post)
-#     # TODO (dhatch): Check that this SQL query is correct, seems right from results.
-#     print_query(posts)
-#     assert tag_nested_many_many_test_fixture['user_eng_post'] in posts
-#     assert tag_nested_many_many_test_fixture['user_user_post'] in posts
-#     assert not tag_nested_many_many_test_fixture['random_post'] in posts
-#     assert not tag_nested_many_many_test_fixture['not_tagged_post'] in posts
-#     assert tag_nested_many_many_test_fixture['all_tagged_post'] in posts
-
-#     posts = authorize_model(oso, tag_nested_many_many_test_fixture['other_user'], "read", session, Post)
-#     assert not tag_nested_many_many_test_fixture['user_eng_post'] in posts
-#     assert not tag_nested_many_many_test_fixture['user_user_post'] in posts
-#     assert tag_nested_many_many_test_fixture['random_post'] in posts
-#     assert not tag_nested_many_many_test_fixture['not_tagged_post'] in posts
-#     assert tag_nested_many_many_test_fixture['all_tagged_post'] in posts
-
-# todo test_nested_relationship_single_many
-# todo test_nested_relationship_single_single
-# todo test_nested_relationship_single_single_single ... etc
-
-# TODO test non Eq conditions
-# TODO test f(x) if not x.boolean_attr;
+    # todo test_nested_relationship_single_many
+    # todo test_nested_relationship_single_single
+    # todo test_nested_relationship_single_single_single ... etc
+    #
+    # TODO test non Eq conditions
+    # TODO test f(x) if not x.boolean_attr;

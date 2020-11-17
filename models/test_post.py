@@ -10,6 +10,7 @@ class Tag(models.Model):
 
     name = fields.Char()
     created_by = fields.Many2one("res.users")
+    users = fields.Many2many("res.users")
     # If provided, posts in this tag always have the public access level.
     is_public = fields.Boolean(default=False)
 
