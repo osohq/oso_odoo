@@ -44,7 +44,7 @@ def partial_to_domain_expr(expr: Expression, model: BaseModel, **kwargs):
     if expr.operator in COMPARISONS:
         return compare_expr(expr, model, **kwargs)
     elif expr.operator == "And":
-        return and_expr(expr, model)
+        return and_expr(expr, model, **kwargs)
     elif expr.operator == "Isa":
         assert expr.args[1].tag == polar_type_name(model._name)
         return None
@@ -61,16 +61,14 @@ def and_expr(expr: Expression, model: BaseModel, **kwargs):
         domain_expr = partial_to_domain_expr(arg, model, **kwargs)
         if domain_expr:
             operands.append(domain_expr)
-
     return domain_expression.AND(operands)
 
 
-def compare_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
-    op = expr.operator
+def compare_expr(expr: Expression, _model: BaseModel, path=[], **kwargs):
     (left, right) = expr.args
     left_path = dot_op_path(left)
     assert left_path, "this arg should be normalized to LHS"
-    return COMPARISONS[op](".".join(path + left_path), right)
+    return COMPARISONS[expr.operator](".".join(path + left_path), right)
 
 
 def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
@@ -83,10 +81,10 @@ def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
     if isinstance(left, Expression):
         if left.operator == "And":
             # Distribute the expression over the "In".
-            return and_expr(left, model, path=right_path)
+            return and_expr(left, model, path=right_path, **kwargs)
         elif left.operator == "In":
             # Nested in operations.
-            return in_expr(left, model, path=right_path)
+            return in_expr(left, model, path=right_path, **kwargs)
         elif left.operator in COMPARISONS:
             # `tag in post.tags and tag.created_by = user` where `post` is a
             # partial and `user` is an Odoo record.

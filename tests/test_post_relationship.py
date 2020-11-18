@@ -274,7 +274,7 @@ class TestOso(TransactionCase):
         self.assertTrue(user_public_post in posts)
         self.assertTrue(user_private_post in posts)
         self.assertTrue(other_user_public_post in posts)
-        self.assertFalse(other_user_private_post in posts)
+        self.assertTrue(other_user_private_post not in posts)
         self.assertTrue(other_user_random_post in posts)
         self.assertTrue(other_user_foo_post in posts)
 
