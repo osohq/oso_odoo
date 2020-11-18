@@ -69,27 +69,8 @@ def compare_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
     op = expr.operator
     (left, right) = expr.args
     left_path = dot_op_path(left)
-
-    if left_path:
-        # LHS of comparison is a dot lookup.
-        return COMPARISONS[op](".".join(path + left_path), right)
-    else:
-        # RHS of comparison is a dot lookup.
-        #
-        # Odoo only allows dot lookups (traversing relationships) in the
-        # field_name, which is on the LHS of a search criterion. Therefore, we
-        # will swap the operands and invert the operator if it is asymmetric.
-        #
-        # See: https://www.odoo.com/documentation/14.0/reference/orm.html#search-domains
-        right_path = dot_op_path(right)
-        assert right_path, "Expected a lookup path"
-
-        domain = COMPARISONS[op](".".join(path + right_path), left)
-        if op in ["Geq", "Gt", "Leq", "Lt"]:
-            domain.insert(0, "!")
-            domain = domain_expression.distribute_not(domain)
-
-        return domain
+    assert left_path, "this arg should be normalized to LHS"
+    return COMPARISONS[op](".".join(path + left_path), right)
 
 
 def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
