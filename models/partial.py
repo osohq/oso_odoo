@@ -36,6 +36,11 @@ def polar_type_name(name):
     return name.replace(".", "::")
 
 
+def odoo_type_name(name):
+    """Translate a Polar type specializer name to an Odoo model name."""
+    return name.replace("::", ".")
+
+
 def partial_to_domain_expr(expr: Expression, model: BaseModel, **kwargs):
     """Translate a Polar expression to an Odoo domain expression."""
     assert isinstance(expr, Expression), "expected a Polar expression"
@@ -46,12 +51,24 @@ def partial_to_domain_expr(expr: Expression, model: BaseModel, **kwargs):
     elif expr.operator == "And":
         return and_expr(expr, model, **kwargs)
     elif expr.operator == "Isa":
-        assert expr.args[1].tag == polar_type_name(model._name)
-        return None
+        return isa_expr(expr, model, **kwargs)
     elif expr.operator == "In":
         return in_expr(expr, model, **kwargs)
     else:
         raise UnsupportedError(f"Unsupported expression {expr}")
+
+
+def isa_expr(expr: Expression, model: BaseModel, **kwargs):
+    (left, right) = expr.args
+    for attr in dot_op_path(left):
+        model = getattr(model, attr)
+    constraint_type = model.env[odoo_type_name(right.tag)].__class__
+    if not issubclass(model.__class__, constraint_type):
+        # Always false.
+        return domain_expression.FALSE_DOMAIN
+    else:
+        # Always true.
+        return None
 
 
 def and_expr(expr: Expression, model: BaseModel, **kwargs):
@@ -64,7 +81,7 @@ def and_expr(expr: Expression, model: BaseModel, **kwargs):
     return domain_expression.AND(operands)
 
 
-def compare_expr(expr: Expression, _model: BaseModel, path=[], **kwargs):
+def compare_expr(expr: Expression, _model: BaseModel, path=(), **kwargs):
     (left, right) = expr.args
     left_path = dot_op_path(left)
     if left_path:
@@ -74,10 +91,10 @@ def compare_expr(expr: Expression, _model: BaseModel, path=[], **kwargs):
             right = right.id
         else:
             raise UnsupportedError(f"Unsupported comparison: {expr}")
-        return COMPARISONS[expr.operator](".".join(path + ["id"]), right)
+        return COMPARISONS[expr.operator](".".join(path + ("id",)), right)
 
 
-def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
+def in_expr(expr: Expression, model: BaseModel, path=(), **kwargs):
     assert expr.operator == "In"
     (left, right) = expr.args
     right_path = dot_op_path(right)
@@ -94,19 +111,19 @@ def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
 def dot_op_path(expr):
     """Get the path components of a lookup.
 
-    The path is returned as a list.
+    The path is returned as a tuple.
 
-    _this.created_by => ['created_by']
-    _this.created_by.username => ['created_by', 'username']
+    _this.created_by => ('created_by',)
+    _this.created_by.username => ('created_by', 'username')
 
-    None is returned if input is not a dot operation.
+    Empty tuple is returned if input is not a dot operation.
     """
     if not (isinstance(expr, Expression) and expr.operator == "Dot"):
-        return None
+        return ()
 
     assert len(expr.args) == 2
 
     if expr.args[0] == Variable("_this"):
-        return [expr.args[1]]
+        return (expr.args[1],)
 
-    return dot_op_path(expr.args[0]) + [expr.args[1]]
+    return dot_op_path(expr.args[0]) + (expr.args[1],)

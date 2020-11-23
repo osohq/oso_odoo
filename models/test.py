@@ -34,3 +34,26 @@ class Repository(models.Model):
     organization = fields.Many2one(
         "oso.test.organization", ondelete="cascade", string="Organization"
     )
+
+
+class Foo(models.Model):
+    _name = "oso.test.foo"
+    _description = "Model for testing oso"
+
+    name = fields.Char(string="Name")
+    bars = fields.One2many("oso.test.bar", "foo", string="Bars")
+
+
+class Bar(models.Model):
+    _name = "oso.test.bar"
+    _description = "Model for testing oso"
+
+    name = fields.Char(string="Name")
+    foo = fields.Many2one("oso.test.foo", ondelete="cascade", string="Foo")
+
+
+class Baz(models.Model):
+    _name = "oso.test.baz"
+    _description = "Model for testing oso"
+
+    name = fields.Char(string="Name")
