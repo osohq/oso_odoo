@@ -266,7 +266,8 @@ class TestOso(TransactionCase):
                 post.created_by = user;
             allow(_user, "read", post: oso::test_post::post) if
                 tag in post.tags and
-                (0 < tag.id and (tag.is_public = true or tag.name = "foo"));
+                0 < tag.id and
+                (tag.is_public = true or tag.name = "foo");
             """
         )
 
@@ -279,8 +280,6 @@ class TestOso(TransactionCase):
         self.assertTrue(other_user_random_post in posts)
         self.assertTrue(other_user_foo_post in posts)
 
-    # # TODO (dhatch): This doesn't actually exercise nested attribute code, because
-    # # the nested piece is in a sub expression.
     def test_nested_relationship_many_single(self):
         """Test that nested relationships work.
 
