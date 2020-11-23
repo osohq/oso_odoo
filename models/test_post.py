@@ -1,6 +1,4 @@
-"""Models for standardized adapter tests based on the Post model:
-https://www.notion.so/osohq/Relationships-621b884edbc6423f93d29e6066e58d16.
-"""
+"""Models for standardized adapter tests based on the Post model."""
 
 from odoo import fields, models
 
