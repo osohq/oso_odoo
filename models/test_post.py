@@ -32,6 +32,7 @@ class User(models.Model):
 
     is_moderator = fields.Boolean(default=False)
     is_banned = fields.Boolean(default=False)
+    posts = fields.Many2many("oso.test_post.post")
 
 
 # Q(ap): What are these for?

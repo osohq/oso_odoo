@@ -350,13 +350,10 @@ class TestOso(TransactionCase):
 
         user = self.make_user("user")
         other_user = self.make_user("other_user")
-        moderator = self.make_user("moderator", is_moderator=False)
 
-        eng = self.make_tag("eng", users=[user.id, moderator.id])
-        user_posts = self.make_tag("user_posts", users=[user.id, moderator.id])
-        random = self.make_tag(
-            "random", is_public=True, users=[other_user.id, moderator.id]
-        )
+        eng = self.make_tag("eng", users=[user.id])
+        user_posts = self.make_tag("user_posts", users=[user.id])
+        random = self.make_tag("random", is_public=True, users=[other_user.id])
 
         user_eng_post = self.make_post("user eng post", "public", user, tags=[eng.id])
         user_user_post = self.make_post(
@@ -379,8 +376,6 @@ class TestOso(TransactionCase):
             tags=[eng.id, user_posts.id, random.id],
         )
 
-        # TODO This direction doesn't work, because tag in user.tags is a concrete object.
-        # allow(user, "read", post: Post) if tag in post.tags and tag in user.tags;
         self.env["oso"].oso.load_str(
             """
             allow_model(_user, _action, "oso.test_post.post");
@@ -405,6 +400,74 @@ class TestOso(TransactionCase):
         self.assertTrue(random_post in posts)
         self.assertTrue(not_tagged_post not in posts)
         self.assertTrue(all_tagged_post in posts)
+
+    def test_partial_in_collection(self):
+        """Test that `_this = ?` works, which is what `concrete in partial`
+        compiles to."""
+
+        user = self.make_user("user")
+        other_user = self.make_user("other_user")
+
+        eng = self.make_tag("eng", users=[user.id])
+        user_posts = self.make_tag("user_posts", users=[user.id])
+        random = self.make_tag("random", is_public=True, users=[other_user.id])
+
+        user_eng_post = self.make_post("user eng post", "public", user, tags=[eng.id])
+        user_user_post = self.make_post(
+            "user user post",
+            "public",
+            user,
+            tags=[user_posts.id],
+        )
+        random_post = self.make_post(
+            "other random post",
+            "public",
+            other_user,
+            tags=[random.id],
+        )
+        not_tagged_post = self.make_post("not tagged post", "public", user, tags=[])
+        all_tagged_post = self.make_post(
+            "all tagged post",
+            "public",
+            user,
+            tags=[eng.id, user_posts.id, random.id],
+        )
+
+        user.write(
+            {
+                "posts": [
+                    user_eng_post.id,
+                    user_user_post.id,
+                    not_tagged_post.id,
+                    all_tagged_post.id,
+                ]
+            }
+        )
+        other_user.write({"posts": [random_post.id]})
+
+        self.env["oso"].oso.load_str(
+            """
+            allow_model(_user, _action, "oso.test_post.post");
+            allow_model(_user, _action, "oso.test_post.tag");
+
+            allow(user: res::users, "read", post: oso::test_post::post) if
+                post in user.posts;
+        """
+        )
+
+        posts = self.env["oso.test_post.post"].with_user(user).search([])
+        self.assertTrue(user_eng_post in posts)
+        self.assertTrue(user_user_post in posts)
+        self.assertTrue(random_post not in posts)
+        self.assertTrue(not_tagged_post in posts)
+        self.assertTrue(all_tagged_post in posts)
+
+        posts = self.env["oso.test_post.post"].with_user(other_user).search([])
+        self.assertTrue(user_eng_post not in posts)
+        self.assertTrue(user_user_post not in posts)
+        self.assertTrue(random_post in posts)
+        self.assertTrue(not_tagged_post not in posts)
+        self.assertTrue(all_tagged_post not in posts)
 
     # todo test_nested_relationship_single_many
     # todo test_nested_relationship_single_single

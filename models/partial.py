@@ -67,8 +67,14 @@ def and_expr(expr: Expression, model: BaseModel, **kwargs):
 def compare_expr(expr: Expression, _model: BaseModel, path=[], **kwargs):
     (left, right) = expr.args
     left_path = dot_op_path(left)
-    assert left_path, "this arg should be normalized to LHS"
-    return COMPARISONS[expr.operator](".".join(path + left_path), right)
+    if left_path:
+        return COMPARISONS[expr.operator](".".join(path + left_path), right)
+    else:
+        if isinstance(right, BaseModel):
+            right = right.id
+        else:
+            raise UnsupportedError(f"Unsupported comparison: {expr}")
+        return COMPARISONS[expr.operator](".".join(path + ["id"]), right)
 
 
 def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
