@@ -4,10 +4,6 @@ from odoo.exceptions import AccessError
 
 from ..models.test import OsoTestModel
 
-from pathlib import Path
-
-from oso import Variable
-
 # Tags required so that classes are registered with oso before tests.
 @tagged("-at_install", "post_install")
 class TestOso(TransactionCase):

@@ -1,12 +1,4 @@
-from functools import wraps
-from logging import getLogger
-from os import listdir, walk
-from os.path import isfile
-from pathlib import Path
-
-
 from odoo import fields, models
-from odoo.exceptions import AccessError
 
 
 class OsoTestModel(models.Model):
