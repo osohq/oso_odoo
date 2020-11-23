@@ -156,10 +156,12 @@ class TestOso(TransactionCase):
         self.env["oso"].oso.load_str(
             """
             allow_model(_user, _action, "oso.test_post.post");
-            allow(actor: res::users, "read", post: oso::test_post::post) if
-                post.created_by = actor and post.access_level = "private";
-            allow(_actor: res::users, "read", post: oso::test_post::post) if
-                post.access_level = "public";
+
+            allow(actor: res::users, "read", _: oso::test_post::post{created_by: actor, access_level: "private"});
+            allow(_: res::users, "read", post) if
+                post matches oso::test_post::post{access_level: "public"};
+            allow(_: res::users{is_moderator: true}, "read", post: oso::test_post::post) if
+                post matches {access_level: "public"};
             """
         )
 
