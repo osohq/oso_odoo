@@ -85,21 +85,8 @@ def in_expr(expr: Expression, model: BaseModel, path=[], **kwargs):
     right_path = path + right_path
 
     if isinstance(left, Expression):
-        if left.operator == "And":
-            # Distribute the expression over the "In".
-            return and_expr(left, model, path=right_path, **kwargs)
-        elif left.operator == "In":
-            # Nested in operations.
-            return in_expr(left, model, path=right_path, **kwargs)
-        elif left.operator in COMPARISONS:
-            # `tag in post.tags and tag.created_by = user` where `post` is a
-            # partial and `user` is an Odoo record.
-            return compare_expr(left, model, path=right_path, **kwargs)
-        else:
-            assert False, f"Unhandled expression {left}"
+        return partial_to_domain_expr(left, model, path=right_path, **kwargs)
     else:
-        # `tag in post.tags and user in tag.users` where `post` is a partial
-        # and `user` is an Odoo record.
         return COMPARISONS["Unify"](".".join(right_path), left)
 
 
