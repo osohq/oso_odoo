@@ -38,4 +38,4 @@ class TestOso(TransactionCase):
         bar = self.env["oso.test.bar"].create({"name": "bar1"})
 
         filter = self.env["oso"].authorize("a", "b", bar)
-        self.assertEqual(filter, [("foo.name", "=", "x")])
+        self.assertEqual(filter, [("foo.name", "=", "y")])

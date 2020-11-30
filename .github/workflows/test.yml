@@ -1,0 +1,19 @@
+name: Development
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:latest
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          docker build -t oso_odoo .
+          docker run -v $(pwd):/mnt/extra-addons/oso_odoo --name odoo --link db:db --rm -t oso_odoo
