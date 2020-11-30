@@ -2,7 +2,7 @@ FROM odoo:13
 
 RUN echo "hi"
 
-RUN pip3 install --upgrade pip && pip3 install oso==0.8.2
+RUN python3 -m pip install --upgrade pip && python3 -m pip install oso==0.8.2
 
 ENTRYPOINT echo "import sys; print(sys.path); import oso; print(oso)" | odoo shell
 
