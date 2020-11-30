@@ -10,11 +10,15 @@ from pathlib import Path
 from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules import get_modules, get_resource_path
+from odoo.osv import expression as domain_expression
+from odoo.models import BaseModel
 
-import polar
-from polar import Polar
 from oso import Oso, OsoError
+from polar import Polar
+from polar.exceptions import DuplicateClassAliasError, FileLoadingError
+from polar.partial import Partial, TypeConstraint
 
+from .partial import partial_to_domain_expr, polar_type_name
 
 _logger = getLogger(__name__)
 
@@ -35,7 +39,7 @@ class Oso(models.AbstractModel):
                 try:
                     _logger.debug(f"Loading policy file: {file}")
                     self.oso.load_file(file)
-                except polar.exceptions.FileLoadingError as e:
+                except FileLoadingError as e:
                     _logger.debug(e)
                     pass
             else:
@@ -75,11 +79,30 @@ class Oso(models.AbstractModel):
             "env",
         )
         self.oso.register_constant(dict(self._context), "context")
-        return self.oso.is_allowed(user, action, resource)
+
+        assert isinstance(resource, BaseModel), "expected a model"
+        type_name = polar_type_name(resource._name)
+        partial_resource = Partial("resource", TypeConstraint(type_name))
+        results = self.oso.query_rule("allow", user, action, partial_resource)
+
+        domain = []
+        for result in results:
+            resource_partial = result["bindings"]["resource"]
+            expr = partial_to_domain_expr(resource_partial, resource)
+            if domain:
+                domain = domain_expression.OR([domain, expr])
+            else:
+                domain = expr
+        if domain == []:
+            domain = domain_expression.FALSE_DOMAIN
+        return domain
 
 
 class OsoUser(models.AbstractModel):
     _inherit = "res.users"
+
+    def _register_hook(self):
+        OsoBase._register_hook(self)
 
     def _group_names(self):
         """Get all user groups as a list of XML string names"""
@@ -92,18 +115,21 @@ class IrModelAccess(models.Model):
     _description = "oso replacement for ir.model.access"
 
     def _check_model_access_by_name(self, operation, model_name):
-        # Check for Odoo bypass rule
-        odoo_result = super().check(model_name, operation, raise_exception=False)
-        if odoo_result:
+        # Check for Odoo bypass rule.
+        if super().check(model_name, operation, raise_exception=False):
             return True
 
-        # Check oso policy
-        oso_result = self.env["oso"].authorize(self.env.user, operation, model_name)
-        if oso_result:
+        # Check oso policy.
+        try:
+            next(
+                self.env["oso"].oso.query_rule(
+                    "allow_model", self.env.user, operation, model_name
+                )
+            )
             return True
-
-        _logger.warning(f"Not authorized to {operation} on {model_name}")
-        return False
+        except StopIteration:
+            _logger.warning(f"Not authorized to {operation} on {model_name}")
+            return False
 
     @api.model
     @tools.ormcache_context(
@@ -173,48 +199,53 @@ class OsoBase(models.AbstractModel):
             return super().check_access_rule(operation)
         elif self.env.su:
             return None
-        elif self.env["oso"].authorize(self.env.user, operation, self):
+
+        domain = self.env["oso"].authorize(self.env.user, operation, self)
+        results = self.filtered_domain(domain)
+        if results:
             _logger.debug(f"{operation} is authorized on {self}")
             return None
         else:
             raise AccessError(f"{operation} is not authorized on {self}")
 
     def _register_hook(self):
+        super()._register_hook()
+
         # Rewrite model name for Polar compatibility.
-        name = self._name.replace(".", "::")
+        name = polar_type_name(self._name)
         oso = self.env["oso"].oso
         try:
             oso.register_class(type(self), name=name)
             _logger.debug(f"registered class {name}")
-        except polar.exceptions.DuplicateClassAliasError as e:
+        except DuplicateClassAliasError as e:
             _logger.debug(f"class {name} already registered")
 
-    def _filter_authorized(self):
+    def _filter_authorized(self, operation):
         results = self
         if not self.env.su and self.env["oso.model.access"].is_checked(self._name):
             _logger.info(f"Authorizing read on {results}")
-            allow_filter = lambda record: self.env["oso"].authorize(
-                self.env.user, "read", record.sudo()
-            )
-            results = results.filtered(allow_filter)
+            domain = self.env["oso"].authorize(self.env.user, operation, self)
+            results = results.filtered_domain(domain)
         return results
 
     def read(self, *args, **kwargs):
         self.check_access_rights("read")
-        results = self._filter_authorized()
+        results = self._filter_authorized("read")
+        if self and not results:
+            raise AccessError(f"read is not authorized on {self}")
         return super(OsoBase, results).read(*args, **kwargs)
 
-    def _search(self, arg, *other_args, access_rights_uid=None, **kwargs):
+    def write(self, vals):
+        results = self._filter_authorized("write")
+        if self and not results:
+            raise AccessError(f"write is not authorized on {self}")
+        return super(OsoBase, results).write(vals)
+
+    def _search(self, domain, *args, access_rights_uid=None, **kwargs):
         if (
             access_rights_uid != 1
             and not self.env.su
             and self.env["oso.model.access"].is_checked(self._name)
         ):
-            # Get all IDs and filter down to just the authorized ones
-            filtered_ids = (
-                self.browse(super(OsoBase, self)._search(arg))._filter_authorized().ids
-            )
-            # add it as a search filter
-            arg += [("id", "in", filtered_ids)]
-        results = super()._search(arg, *other_args, **kwargs)
-        return results
+            domain += self.env["oso"].authorize(self.env.user, "read", self)
+        return super()._search(domain, *args, **kwargs)
