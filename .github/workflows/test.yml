@@ -12,6 +12,8 @@ jobs:
     services:
       db:
         image: postgres:latest
+        ports:
+          - 5432:5432
         env:
           POSTGRES_USER: odoo
           POSTGRES_PASSWORD: odoo
@@ -20,4 +22,4 @@ jobs:
       - uses: actions/checkout@v2
       - run: |
           docker build -t oso_odoo .
-          docker run -v $(pwd):/mnt/extra-addons/oso_odoo --name odoo --link db:db --rm -t oso_odoo
+          docker run -v $(pwd):/mnt/extra-addons/oso_odoo -p 5432:5432 --name odoo --rm -t oso_odoo
