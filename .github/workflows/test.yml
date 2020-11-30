@@ -12,6 +12,10 @@ jobs:
     services:
       db:
         image: postgres:latest
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: odoo
     steps:
       - uses: actions/checkout@v2
       - run: |
