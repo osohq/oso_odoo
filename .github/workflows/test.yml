@@ -22,5 +22,4 @@ jobs:
       - uses: actions/checkout@v2
       - run: |
           docker build -t oso_odoo .
-          docker run -v $(pwd):/mnt/extra-addons/oso_odoo --network=host --name odoo --rm -t oso_odoo python3 -m oso
           docker run -v $(pwd):/mnt/extra-addons/oso_odoo --network=host --name odoo --rm -t oso_odoo
