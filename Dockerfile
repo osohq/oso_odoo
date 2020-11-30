@@ -4,7 +4,7 @@ RUN echo "hi"
 
 RUN pip3 install --upgrade pip && pip3 install oso==0.8.2
 
-ENTRYPOINT echo "import oso; print(oso)" | odoo shell
+ENTRYPOINT echo "import sys; print(sys.path); import oso; print(oso)" | odoo shell
 
 # ENTRYPOINT ["odoo", "-c", "import oso"]
 
