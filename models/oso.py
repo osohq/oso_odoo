@@ -11,6 +11,7 @@ from odoo import fields, models, api, tools
 from odoo.exceptions import AccessError
 from odoo.modules import get_modules, get_resource_path
 from odoo.osv import expression as domain_expression
+from odoo.models import BaseModel
 
 from oso import Oso, OsoError
 from polar import Polar
@@ -79,27 +80,22 @@ class Oso(models.AbstractModel):
         )
         self.oso.register_constant(dict(self._context), "context")
 
-        # TODO(ap): Should we handle model-level access using partials, too?
-        if isinstance(resource, str):
-            return next(
-                self.oso.query_rule("allow_model", user, action, resource), False
-            )
-        else:
-            type_name = polar_type_name(resource._name)
-            partial_resource = Partial("resource", TypeConstraint(type_name))
-            results = self.oso.query_rule("allow", user, action, partial_resource)
+        assert isinstance(resource, BaseModel), "expected a model"
+        type_name = polar_type_name(resource._name)
+        partial_resource = Partial("resource", TypeConstraint(type_name))
+        results = self.oso.query_rule("allow", user, action, partial_resource)
 
-            domain = []
-            for result in results:
-                resource_partial = result["bindings"]["resource"]
-                expr = partial_to_domain_expr(resource_partial, resource)
-                if domain:
-                    domain = domain_expression.OR([domain, expr])
-                else:
-                    domain = expr
-            if domain == []:
-                domain = domain_expression.FALSE_DOMAIN
-            return domain
+        domain = []
+        for result in results:
+            resource_partial = result["bindings"]["resource"]
+            expr = partial_to_domain_expr(resource_partial, resource)
+            if domain:
+                domain = domain_expression.OR([domain, expr])
+            else:
+                domain = expr
+        if domain == []:
+            domain = domain_expression.FALSE_DOMAIN
+        return domain
 
 
 class OsoUser(models.AbstractModel):
@@ -119,18 +115,21 @@ class IrModelAccess(models.Model):
     _description = "oso replacement for ir.model.access"
 
     def _check_model_access_by_name(self, operation, model_name):
-        # Check for Odoo bypass rule
-        odoo_result = super().check(model_name, operation, raise_exception=False)
-        if odoo_result:
+        # Check for Odoo bypass rule.
+        if super().check(model_name, operation, raise_exception=False):
             return True
 
-        # Check oso policy
-        oso_result = self.env["oso"].authorize(self.env.user, operation, model_name)
-        if oso_result:
+        # Check oso policy.
+        try:
+            next(
+                self.env["oso"].oso.query_rule(
+                    "allow_model", self.env.user, operation, model_name
+                )
+            )
             return True
-
-        _logger.warning(f"Not authorized to {operation} on {model_name}")
-        return False
+        except StopIteration:
+            _logger.warning(f"Not authorized to {operation} on {model_name}")
+            return False
 
     @api.model
     @tools.ormcache_context(
