@@ -1,0 +1,25 @@
+name: Development
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:latest
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: odoo
+          POSTGRES_PASSWORD: odoo
+          POSTGRES_DB: odoo
+    steps:
+      - uses: actions/checkout@v2
+      - run: |
+          docker build -t oso_odoo .
+          docker run -v $(pwd):/mnt/extra-addons/oso_odoo --network=host --name odoo --rm -t oso_odoo
