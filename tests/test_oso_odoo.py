@@ -55,13 +55,16 @@ class TestOso(TransactionCase):
             """
         )
 
-        null_foo = foo.create({"name": None})
-        breakpoint()
-        filter = oso.authorize("a", "unlink", null_foo)
-        # TODO(gj): update the below to False after registering nil as False in Odooland.
-        self.assertEqual(filter, [("name", "=", None)])
-        null_foo.unlink()
+        # Create some objects and check that we can read them.
+        null_foo = foo.create({})
+        non_null_foo = foo.create({"name": "non-null"})
+        self.assertEqual(list(foo.search([])), [null_foo, non_null_foo])
 
-        non_null_foo = foo.create({})
+        # Check authorization filter.
+        filter = oso.authorize("a", "unlink", null_foo)
+        self.assertEqual(filter, [("name", "=", False)])
+
+        # Check authorization.
+        null_foo.unlink()
         with self.assertRaises(AccessError):
             non_null_foo.unlink()

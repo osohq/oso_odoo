@@ -62,13 +62,12 @@ def isa_expr(expr: Expression, model: BaseModel, **kwargs):
     (left, right) = expr.args
     for attr in dot_op_path(left):
         model = getattr(model, attr)
+
     constraint_type = model.env[odoo_type_name(right.tag)].__class__
-    if not issubclass(model.__class__, constraint_type):
-        # Always false.
-        return domain_expression.FALSE_DOMAIN
+    if issubclass(model.__class__, constraint_type):
+        return domain_expression.TRUE_DOMAIN
     else:
-        # Always true.
-        return None
+        return domain_expression.FALSE_DOMAIN
 
 
 def and_expr(expr: Expression, model: BaseModel, **kwargs):
