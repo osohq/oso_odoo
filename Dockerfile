@@ -6,4 +6,5 @@ RUN python3 -m pip install --quiet --upgrade pip && python3 -m pip install --qui
 
 USER odoo
 
-ENTRYPOINT odoo -i base,web --stop-after-init --log-level=error --database=odoo --db_host=localhost --db_password=odoo && odoo -i oso_odoo --test-enable --stop-after-init --log-level=error --database=odoo --db_host=localhost --db_password=odoo
+ENTRYPOINT odoo -i base,web --stop-after-init --log-level=error --database=odoo --db_host=localhost --db_password=odoo && \
+  odoo -i oso_odoo --test-enable --stop-after-init --log-level=error --database=odoo --db_host=localhost --db_password=odoo

@@ -31,6 +31,9 @@ class Oso(models.AbstractModel):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        # Odoo maps False (not None) to SQL NULL.
+        self.oso.register_constant(False, "nil")
+
     def load_policies(self):
         """Walks all modules and loads and .polar policy files found"""
 
